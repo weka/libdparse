@@ -3632,15 +3632,15 @@ invariant() foo();
     ModuleDeclaration parseModuleDeclaration()
     {
         auto node = allocate!ModuleDeclaration;
+        node.startLocation = current().index;
         auto start = expect(tok!"module");
         node.moduleName = parseIdentifierChain();
+        node.endLocation = current().index;
+
         node.comment = start.comment;
 		if (node.comment is null)
 			node.comment = start.trailingComment;
         comment = null;
-        auto end = expect(tok!";");
-        node.startLocation = start.index;
-        node.endLocation = end.index;
         return node;
     }
 
