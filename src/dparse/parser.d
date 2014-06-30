@@ -3929,19 +3929,17 @@ class Parser
     ModuleDeclaration parseModuleDeclaration()
     {
         auto node = allocator.make!ModuleDeclaration;
+        node.startLocation = current().index;
         if (currentIs(tok!"deprecated"))
             mixin(parseNodeQ!(`node.deprecated_`, `Deprecated`));
         const start = expect(tok!"module");
         mixin(nullCheck!`start`);
         mixin(parseNodeQ!(`node.moduleName`, `IdentifierChain`));
+        node.endLocation = current().index;
         node.comment = start.comment;
         if (node.comment is null)
             node.comment = start.trailingComment;
         comment = null;
-        const end = expect(tok!";");
-        node.startLocation = start.index;
-        if (end !is null)
-            node.endLocation = end.index;
         return node;
     }
 
