@@ -1209,10 +1209,11 @@ incorrect;
      *     | $(LITERAL 'class') $(LITERAL Identifier) $(RULE templateParameters) ($(LITERAL ':') $(RULE baseClassList))? $(RULE constraint)? $(RULE structBody)
      *     ;)
      */
-    ClassDeclaration parseClassDeclaration()
+    ClassDeclaration parseClassDeclaration(Attribute[] attributes = null)
     {
         mixin(traceEnterAndExit!(__FUNCTION__));
         auto node = allocate!ClassDeclaration;
+        node.attributes = attributes;
         expect(tok!"class");
         auto ident = expect(tok!"identifier");
         if (ident is null) return null;
@@ -1683,7 +1684,7 @@ class ClassFive(A, B) : Super if (someTest()) {}}c;
                 node.aliasDeclaration = parseAliasDeclaration();
             break;
         case tok!"class":
-            node.classDeclaration = parseClassDeclaration();
+            node.classDeclaration = parseClassDeclaration(node.attributes);
             break;
         case tok!"this":
             if (startsWith(tok!"this", tok!"(", tok!"this"))
@@ -1769,7 +1770,7 @@ class ClassFive(A, B) : Super if (someTest()) {}}c;
                 goto type;
             break;
         case tok!"struct":
-            node.structDeclaration = parseStructDeclaration();
+            node.structDeclaration = parseStructDeclaration(node.attributes);
             break;
         case tok!"template":
             node.templateDeclaration = parseTemplateDeclaration();
@@ -4870,10 +4871,11 @@ q{(int a, ...)
      *     $(LITERAL 'struct') $(LITERAL Identifier)? ($(RULE templateParameters) $(RULE constraint)? $(RULE structBody) | ($(RULE structBody) | $(LITERAL ';')))
      *     ;)
      */
-    StructDeclaration parseStructDeclaration()
+    StructDeclaration parseStructDeclaration(Attribute[] attributes = null)
     {
         mixin(traceEnterAndExit!(__FUNCTION__));
         auto node = allocate!StructDeclaration;
+        node.attributes = attributes;
         expect(tok!"struct");
         if (currentIs(tok!"identifier"))
         {
