@@ -962,7 +962,7 @@ public:
     /** */ ExpressionNode low;
     /** */ ExpressionNode high;
     /** */ DeclarationsAndStatements declarationsAndStatements;
-	/** */ size_t colonLocation;
+    /** */ size_t colonLocation;
     mixin OpEquals;
 }
 
@@ -976,7 +976,7 @@ public:
     }
     /** */ ArgumentList argumentList;
     /** */ DeclarationsAndStatements declarationsAndStatements;
-	/** */ size_t colonLocation;
+    /** */ size_t colonLocation;
     mixin OpEquals;
 }
 
@@ -1050,6 +1050,7 @@ public:
     /** */ BaseClassList baseClassList;
     /** */ StructBody structBody;
     /** */ string comment;
+    /** */ Attribute[] attributes;
     mixin OpEquals;
 }
 
@@ -1288,7 +1289,7 @@ public:
         mixin (visitIfNotNull!(declarationsAndStatements));
     }
     /** */ DeclarationsAndStatements declarationsAndStatements;
-	/** */ size_t colonLocation;
+    /** */ size_t colonLocation;
     mixin OpEquals;
 }
 
@@ -2605,6 +2606,7 @@ public:
     /** */ Constraint constraint;
     /** */ StructBody structBody;
     /** */ string comment;
+    /** */ Attribute[] attributes;
     mixin OpEquals;
 }
 

@@ -1401,10 +1401,11 @@ class Parser
      *     | $(LITERAL 'class') $(LITERAL Identifier) $(RULE templateParameters) ($(LITERAL ':') $(RULE baseClassList))? $(RULE constraint)? $(RULE structBody)
      *     ;)
      */
-    ClassDeclaration parseClassDeclaration()
+    ClassDeclaration parseClassDeclaration(Attribute[] attributes = null)
     {
         mixin(traceEnterAndExit!(__FUNCTION__));
         auto node = allocate!ClassDeclaration;
+        node.attributes = attributes;
         expect(tok!"class");
         mixin (PARSE_INTERFACE_OR_CLASS);
     }
@@ -1850,7 +1851,7 @@ class Parser
                 mixin (nullCheck!`node.aliasDeclaration = parseAliasDeclaration()`);
             break;
         case tok!"class":
-            mixin (nullCheck!`node.classDeclaration = parseClassDeclaration()`);
+            mixin (nullCheck!`node.classDeclaration = parseClassDeclaration(node.attributes)`);
             break;
         case tok!"this":
             if (startsWith(tok!"this", tok!"(", tok!"this", tok!")"))
@@ -1975,7 +1976,7 @@ class Parser
                 goto type;
             break;
         case tok!"struct":
-            mixin (nullCheck!`node.structDeclaration = parseStructDeclaration()`);
+            mixin (nullCheck!`node.structDeclaration = parseStructDeclaration(node.attributes)`);
             break;
         case tok!"template":
             mixin (nullCheck!`node.templateDeclaration = parseTemplateDeclaration()`);
@@ -5125,10 +5126,11 @@ class Parser
      *     $(LITERAL 'struct') $(LITERAL Identifier)? ($(RULE templateParameters) $(RULE constraint)? $(RULE structBody) | ($(RULE structBody) | $(LITERAL ';')))
      *     ;)
      */
-    StructDeclaration parseStructDeclaration()
+    StructDeclaration parseStructDeclaration(Attribute[] attributes=null)
     {
         mixin(traceEnterAndExit!(__FUNCTION__));
         auto node = allocate!StructDeclaration;
+        node.attributes = attributes;
         auto t = expect(tok!"struct");
         if (currentIs(tok!"identifier"))
             node.name = advance();
