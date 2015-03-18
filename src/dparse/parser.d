@@ -3918,8 +3918,12 @@ class Parser
     {
         mixin(traceEnterAndExit!(__FUNCTION__));
         Module m = allocator.make!Module;
-        if (currentIs(tok!"scriptLine"))
+        bool isScript;
+        bool isModule;
+        if (currentIs(tok!"scriptLine")){
+            isScript = true;
             m.scriptLine = advance();
+        }
         bool isDeprecatedModule;
         if (currentIs(tok!"deprecated"))
         {
@@ -3930,13 +3934,17 @@ class Parser
             isDeprecatedModule = currentIs(tok!"module");
             goToBookmark(b);
         }
-        if (currentIs(tok!"module") || isDeprecatedModule)
-        {
+        if (currentIs(tok!"module") || isDeprecatedModule) {
             immutable c = allocator.setCheckpoint();
+            isModule = true;
             m.moduleDeclaration = parseModuleDeclaration();
             if (m.moduleDeclaration is null)
                 allocator.rollback(c);
+        }else{
+            warn("WARN: file '%s' does not seem to be a module (no 'module' declaration found);
+                this is syntactically acceptable, but the instrumenter may not find it all that amusing.".format(fileName));
         }
+
         StackBuffer declarations;
         while (moreTokens())
         {
