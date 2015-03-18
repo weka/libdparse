@@ -3879,8 +3879,12 @@ class Parser
     {
         mixin(traceEnterAndExit!(__FUNCTION__));
         Module m = allocator.make!Module;
-        if (currentIs(tok!"scriptLine"))
+        bool isScript;
+        bool isModule;
+        if (currentIs(tok!"scriptLine")){
+            isScript = true;
             m.scriptLine = advance();
+        }
         bool isDeprecatedModule;
         if (currentIs(tok!"deprecated"))
         {
@@ -3893,10 +3897,16 @@ class Parser
         }
         if (currentIs(tok!"module") || isDeprecatedModule)
         {
+            isModule = true;
             immutable c = allocator.setCheckpoint();
             m.moduleDeclaration = parseModuleDeclaration();
-            if (m.moduleDeclaration is null)
+            if (m.moduleDeclaration is null) {
                 allocator.rollback(c);
+            }
+        }else{
+            import std.stdio : stderr;
+            stderr.writefln("WARN: file '%s' does not seem to be a module (no 'module' declaration found);
+                this is syntactically acceptable, but the instrumenter may not find it all that amusing.".format(fileName));
         }
         StackBuffer declarations;
         while (moreTokens())
