@@ -3608,10 +3608,20 @@ invariant() foo();
     {
         mixin(traceEnterAndExit!(__FUNCTION__));
         Module m = allocate!Module;
-        if (currentIs(tok!"scriptLine"))
+        bool isScript;
+        bool isModule;
+        if (currentIs(tok!"scriptLine")){
+            isScript = true;
             m.scriptLine = advance();
-        if (currentIs(tok!"module"))
+        }
+        if (currentIs(tok!"module")){
+            isModule = true;
             m.moduleDeclaration = parseModuleDeclaration();
+        }else{
+            stderr.writefln("WARN: file '%s' does not seem to be a module (no 'module' declaration found);
+                this is syntactically acceptable, but the instrumenter may not find it all that amusing.", fileName);
+        }
+
         Declaration[] declarations;
         while (moreTokens())
         {
