@@ -2250,7 +2250,7 @@ version (iasm64NotWindows)
      */
     ushort newlineMask(const ubyte*) pure nothrow @trusted @nogc
     {
-        asm pure nothrow @nogc
+        asm pure nothrow @trusted @nogc
         {
             naked;
             movdqu XMM1, [RDI];
@@ -2306,7 +2306,7 @@ version (iasm64NotWindows)
             enum flags = 0b0001_0000;
         else
             enum flags = 0b0000_0000;
-        asm pure nothrow @nogc
+        asm pure nothrow @trusted @nogc
         {
             naked;
             movdqu XMM1, [RDX];
@@ -2334,7 +2334,7 @@ version (iasm64NotWindows)
         else
             enum rangeMatchFlags = 0b0001_0100;
         enum charsLength = chars.length;
-        asm pure nothrow @nogc
+        asm pure nothrow @trusted @nogc
         {
             naked;
             movdqu XMM1, [RDI];
