@@ -2243,6 +2243,31 @@ unittest
     assert (toks(`'\xXX'`).messages[0] == DLexer.Message(1,4,"Error: 2 hex digits expected.",true));
 }
 
+string getMultiVersionAsm(string code, bool isPure=true, bool isNoThrow=true, bool isTrusted=true, bool isGc=false){
+    string ret = "asm ";
+    static if(__VERSION__ >= 2067){
+        if (isPure){
+            ret ~= "pure ";
+        }
+        if (isNoThrow){
+            ret ~= "nothrow ";
+        }else{
+            ret ~= "throw ";
+        }
+        if (isTrusted){
+            ret ~= "@trusted ";
+        }
+        if (isGc){
+            ret ~= "@gc ";
+        }else{
+            ret ~= "@nogc ";
+        }
+    }
+    ret ~= "{\n" ~ code ~ "\n}";
+    return ret;
+}
+
+
 version (iasm64NotWindows)
 {
     /**
@@ -2250,8 +2275,7 @@ version (iasm64NotWindows)
      */
     ushort newlineMask(const ubyte*) pure nothrow @trusted @nogc
     {
-        asm pure nothrow @trusted @nogc
-        {
+        mixin(getMultiVersionAsm(q{
             naked;
             movdqu XMM1, [RDI];
             mov RAX, 3;
@@ -2290,7 +2314,7 @@ version (iasm64NotWindows)
             pmovmskb RAX, XMM7;
             and RAX, 0b0011_1111_1111_1111;
             ret;
-        }
+        }));
     }
 
     /**
@@ -2306,8 +2330,7 @@ version (iasm64NotWindows)
             enum flags = 0b0001_0000;
         else
             enum flags = 0b0000_0000;
-        asm pure nothrow @trusted @nogc
-        {
+        mixin(getMultiVersionAsm(q{
             naked;
             movdqu XMM1, [RDX];
             mov R10, constant;
@@ -2318,7 +2341,7 @@ version (iasm64NotWindows)
             add [RSI], RCX;
             add [RDI], RCX;
             ret;
-        }
+        }));
     }
 
     /**
@@ -2334,8 +2357,7 @@ version (iasm64NotWindows)
         else
             enum rangeMatchFlags = 0b0001_0100;
         enum charsLength = chars.length;
-        asm pure nothrow @trusted @nogc
-        {
+        mixin(getMultiVersionAsm(q{
             naked;
             movdqu XMM1, [RDI];
             mov R10, constant;
@@ -2345,7 +2367,7 @@ version (iasm64NotWindows)
             pcmpestri XMM2, XMM1, rangeMatchFlags;
             mov RAX, RCX;
             ret;
-        }
+        }));
     }
 
     template ByteCombine(c...)
