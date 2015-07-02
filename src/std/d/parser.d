@@ -809,8 +809,12 @@ class Parser
     {
         mixin(traceEnterAndExit!(__FUNCTION__));
         auto node = allocate!AssertExpression;
-        expect(tok!"assert");
+        auto start = expect(tok!"assert");
+        node.startLocation = start.index;
         mixin (nullCheck!`expect(tok!"(")`);
+        if (currentIs(tok!"false")){
+            node.isStatic = true;
+        }
         mixin (nullCheck!`node.assertion = parseAssignExpression()`);
         if (currentIs(tok!","))
         {
@@ -818,6 +822,7 @@ class Parser
             mixin (nullCheck!`node.message = parseAssignExpression()`);
         }
         mixin (nullCheck!`expect(tok!")")`);
+        if (moreTokens) node.endLocation = current().index;
         return node;
     }
 
@@ -4982,7 +4987,13 @@ class Parser
      *     $(LITERAL 'static') $(RULE assertExpression) $(LITERAL ';')
      *     ;)
      */
-    StaticAssertStatement parseStaticAssertStatement()
+    StaticAssertStatement parseStaticAssertStatement(){
+        StaticAssertStatement stmt = parseStaticAssertStatementImpl();
+        stmt.assertExpression.isStatic = true;
+        return stmt;
+    }
+
+    StaticAssertStatement parseStaticAssertStatementImpl()
     {
         mixin(traceEnterAndExit!(__FUNCTION__));
         mixin (simpleParse!(StaticAssertStatement,

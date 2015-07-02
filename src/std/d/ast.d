@@ -783,6 +783,9 @@ public:
     }
     /** */ ExpressionNode assertion;
     /** */ ExpressionNode message;
+    /** */ size_t startLocation;
+    /** */ size_t endLocation;
+    /** */ bool isStatic;
     mixin OpEquals;
 }
 
