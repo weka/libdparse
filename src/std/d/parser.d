@@ -3618,8 +3618,8 @@ invariant() foo();
             isModule = true;
             m.moduleDeclaration = parseModuleDeclaration();
         }else{
-            stderr.writefln("WARN: file '%s' does not seem to be a module (no 'module' declaration found);
-                this is syntactically acceptable, but the instrumenter may not find it all that amusing.", fileName);
+            stderr.writefln("WARN: file '%s' does not seem to be a module (no 'module' declaration found);"
+                ~ " this is syntactically acceptable, but the instrumenter may not find it all that amusing.", fileName);
         }
 
         Declaration[] declarations;
