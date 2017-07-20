@@ -1132,6 +1132,7 @@ public:
     /** */ BaseClassList baseClassList;
     /** */ StructBody structBody;
     /** */ string comment;
+    /** */ Attribute[] attributes;
     mixin OpEquals;
 }
 
@@ -2747,6 +2748,7 @@ public:
     /** */ Constraint constraint;
     /** */ StructBody structBody;
     /** */ string comment;
+    /** */ Attribute[] attributes;
     mixin OpEquals;
 }
 
