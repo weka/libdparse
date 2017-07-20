@@ -661,7 +661,6 @@ class Formatter(Sink)
 
         with(catch_)
         {
-            newThing(What.catch_);
             put("catch(");
             format(type);
             if (identifier != tok!"")
@@ -3148,7 +3147,6 @@ class Formatter(Sink)
 
         with(tryStatement)
         {
-            newThing(What.other);
             put("try");
             maybeIndent(declarationOrStatement);
             if (catches) format(catches);
