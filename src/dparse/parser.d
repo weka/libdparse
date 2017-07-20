@@ -1463,7 +1463,8 @@ class Parser
     {
         mixin(traceEnterAndExit!(__FUNCTION__));
         auto node = allocator.make!ClassDeclaration;
-        node.attributes = attributes;
+        struct Foo { Attribute[] attrs; }
+        node._attributes = &(new Foo(attributes)).attrs;
         expect(tok!"class");
         return parseInterfaceOrClass(node);
     }

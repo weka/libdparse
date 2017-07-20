@@ -1137,7 +1137,9 @@ public:
     /** */ BaseClassList baseClassList;
     /** */ StructBody structBody;
     /** */ string comment;
-    /** */ Attribute[] attributes;
+    // Without ptr this enlarges the class from 152 to 166 bytes. Beyond 160 bytes we get crashes :-(
+    /** */ Attribute[]* _attributes;
+    @property auto ref attributes() inout { return *_attributes; }
     mixin OpEquals;
 }
 
