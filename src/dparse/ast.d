@@ -390,9 +390,14 @@ template generateOpEquals(T)
         {
             static if (typeof(__traits(getMember, T, p[0])).stringof[$ - 2 .. $] == "[]")
             {
-                enum opEqualsPart = "\nif (obj." ~ p[0] ~ ".length != this." ~ p[0] ~ ".length) return false;\n"
-                    ~ "foreach (i; 0 .. this." ~ p[0] ~ ".length)\n"
-                    ~ "\tif (this." ~ p[0] ~ "[i] != obj." ~ p[0] ~ "[i]) return false;" ~ opEqualsPart!(p[1 .. $]);
+                enum opEqualsPart = q{
+                    if ((obj.%1$s is null) != (this.%1$s is null)) return false;
+                    if (obj.%1$s !is null) {
+                        if (obj.%1$s.length != this.%1$s.length) return false;
+                        foreach (i; 0 .. this.%1$s.length)
+                            if (this.%1$s[i] != obj.%1$s[i]) return false;
+                    }
+                }.format(p[0]) ~ opEqualsPart!(p[1 .. $]);
             }
             else
                 enum opEqualsPart = "\nif (obj." ~ p[0] ~ " != this." ~ p[0] ~ ") return false;" ~ opEqualsPart!(p[1 .. $]);
