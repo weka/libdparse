@@ -769,6 +769,20 @@ class Formatter(Sink)
         }
     }
 
+    void formatBlock(Node)(const Node[] nodes) {
+        if(nodes.length > 1) {
+            startBlock();
+            foreach(d; nodes) format(d);
+            endBlock();
+            return;
+        }
+        if(nodes.length == 1) {
+            maybeIndent(nodes[0]);
+            return;
+        }
+        put("{}");
+    }
+
     void format(const ConditionalDeclaration decl, const Attribute[] attrs = null)
     {
         debug(verbose) writeln("ConditionalDeclaration");
@@ -783,32 +797,11 @@ class Formatter(Sink)
         putAttrs(attrs);
         format(decl.compileCondition);
 
-        if (decl.trueDeclarations.length > 1)
-        {
-            startBlock();
-            foreach (d; decl.trueDeclarations)
-                format(d);
-            endBlock();
-        }
-        else if (decl.trueDeclarations.length == 0)
-            maybeIndent(decl.trueDeclarations[0]);
-        else
-            put("{}");
-
-        if (decl.falseDeclarations.length > 0)
+        formatBlock(decl.trueDeclarations);
+        if (decl.falseDeclarations.length > 0) {
             put("else");
-
-        if (decl.falseDeclarations.length > 1)
-        {
-            startBlock();
-            foreach (d; decl.falseDeclarations)
-                format(d);
-            endBlock();
+            formatBlock(decl.falseDeclarations);
         }
-        else if (decl.falseDeclarations.length == 0)
-            maybeIndent(decl.falseDeclarations[0]);
-        else
-            put("{}");
     }
 
     void format(const ConditionalStatement stmnt)
