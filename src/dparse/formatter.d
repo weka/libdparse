@@ -3748,7 +3748,9 @@ protected:
     {
         import std.string : splitLines;
         if (!c.length) return;
-        put(c.splitLines().join("\n" ~ getIndent()));
+        put("/**"); space();
+        foreach(line; c.splitLines()) put(line);
+        space(); put("*/");
         newlineIndent();
     }
 
