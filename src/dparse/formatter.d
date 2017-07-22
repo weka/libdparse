@@ -2,7 +2,6 @@ module dparse.formatter;
 
 import std.algorithm;
 import std.range;
-import std.stdio;
 import std.typetuple:TypeTuple;
 
 import dparse.ast;
@@ -54,6 +53,17 @@ void format(Sink, T)(Sink sink, T node, bool useTabs = false,
     formatter.format(node);
 }
 
+debug(verbose) {
+    void debug_log(Args...)(Args args) {
+        import std.stdio : stderr;
+        stderr.writeln(args);
+        stderr.flush();
+    }
+} else {
+    void debug_log(Args...)(Args args) {
+    }
+}
+
 ///
 class Formatter(Sink)
 {
@@ -75,14 +85,14 @@ class Formatter(Sink)
     ///
     void format(const AddExpression addExpression)
     {
-        debug(verbose) writeln("AddExpression");
+        debug_log("AddExpression");
         mixin(binary("addExpression"));
     }
 
     ///
     void format(const AliasDeclaration aliasDeclaration, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("AliasDeclaration");
+        debug_log("AliasDeclaration");
 
         /**
         LinkageAttribute linkageAttribute;
@@ -129,7 +139,7 @@ class Formatter(Sink)
 
     void format(const AliasInitializer aliasInitializer)
     {
-        debug(verbose) writeln("AliasInitializer");
+        debug_log("AliasInitializer");
 
         /**
         Token name;
@@ -146,7 +156,7 @@ class Formatter(Sink)
 
     void format(const AliasThisDeclaration decl, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("AliasThisDeclaration");
+        debug_log("AliasThisDeclaration");
 
         /**
         Token identifier;
@@ -160,7 +170,7 @@ class Formatter(Sink)
 
     void format(const AlignAttribute alignAttribute)
     {
-        debug(verbose) writeln("AlignAttribute");
+        debug_log("AlignAttribute");
 
         /**
         Token intLiteral;
@@ -177,7 +187,7 @@ class Formatter(Sink)
 
     void format(const AndAndExpression andAndExpression)
     {
-        debug(verbose) writeln("AndAndExpression");
+        debug_log("AndAndExpression");
 
         with(andAndExpression)
         {
@@ -192,7 +202,7 @@ class Formatter(Sink)
 
     void format(const AndExpression andExpression)
     {
-        debug(verbose) writeln("AndExpression");
+        debug_log("AndExpression");
 
         with(andExpression)
         {
@@ -207,7 +217,7 @@ class Formatter(Sink)
 
     void format(const ArgumentList argumentList)
     {
-        debug(verbose) writeln("ArgumentList");
+        debug_log("ArgumentList");
 
         foreach(count, arg; argumentList.items)
         {
@@ -218,7 +228,7 @@ class Formatter(Sink)
 
     void format(const Arguments arguments)
     {
-        debug(verbose) writeln("Arguments");
+        debug_log("Arguments");
 
         put("(");
         if (arguments.argumentList) format(arguments.argumentList);
@@ -227,7 +237,7 @@ class Formatter(Sink)
 
     void format(const ArrayInitializer arrayInitializer)
     {
-        debug(verbose) writeln("ArrayInitializer");
+        debug_log("ArrayInitializer");
 
         /**
         ArrayMemberInitialization[] arrayMemberInitializations;
@@ -245,7 +255,7 @@ class Formatter(Sink)
 
     void format(const ArrayLiteral arrayLiteral)
     {
-        debug(verbose) writeln("ArrayLiteral");
+        debug_log("ArrayLiteral");
 
         /**
         ArgumentList argumentList;
@@ -258,7 +268,7 @@ class Formatter(Sink)
 
     void format(const ArrayMemberInitialization arrayMemberInitialization)
     {
-        debug(verbose) writeln("ArrayMemberInitialization");
+        debug_log("ArrayMemberInitialization");
 
         /**
         AssignExpression assignExpression;
@@ -365,7 +375,7 @@ class Formatter(Sink)
 
     void format(const AssertExpression assertExpression)
     {
-        debug(verbose) writeln("AssertExpression");
+        debug_log("AssertExpression");
 
         /**
         AssignExpression assertion;
@@ -387,7 +397,7 @@ class Formatter(Sink)
 
     void format(const AssignExpression assignExpression)
     {
-        debug(verbose) writeln("AssignExpression");
+        debug_log("AssignExpression");
 
         /**
         ExpressionNode ternaryExpression;
@@ -409,7 +419,7 @@ class Formatter(Sink)
 
     void format(const AssocArrayLiteral assocArrayLiteral)
     {
-        debug(verbose) writeln("AssocArrayLiteral");
+        debug_log("AssocArrayLiteral");
 
         /**
         KeyValuePairs keyValuePairs;
@@ -422,7 +432,7 @@ class Formatter(Sink)
 
     void format(const AtAttribute atAttribute)
     {
-        debug(verbose) writeln("AtAttribute");
+        debug_log("AtAttribute");
 
         /**
         FunctionCallExpression functionCallExpression;
@@ -440,7 +450,7 @@ class Formatter(Sink)
 
     void format(const Attribute att)
     {
-        debug(verbose) writeln("Attribute");
+        debug_log("Attribute");
 
         /**
         LinkageAttribute linkageAttribute;
@@ -468,7 +478,7 @@ class Formatter(Sink)
 
     void format(const AttributeDeclaration decl, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("AttributeDeclaration");
+        debug_log("AttributeDeclaration");
 
         auto cIndent = indentLevel;
         outdent();
@@ -481,7 +491,7 @@ class Formatter(Sink)
 
     void format(const AutoDeclaration decl)
     {
-        debug(verbose) writeln("AutoDeclaration");
+        debug_log("AutoDeclaration");
 
         /**
         Token[] identifiers;
@@ -506,7 +516,7 @@ class Formatter(Sink)
 
     void format(const BlockStatement blockStatement)
     {
-        debug(verbose) writeln("BlockStatement");
+        debug_log("BlockStatement");
 
         if (blockStatement.declarationsAndStatements is null)
         {
@@ -523,7 +533,7 @@ class Formatter(Sink)
 
     void format(const BodyStatement bodyStatement)
     {
-        debug(verbose) writeln("BodyStatement");
+        debug_log("BodyStatement");
 
         newline();
         put("body");
@@ -532,7 +542,7 @@ class Formatter(Sink)
 
     void format(const BreakStatement breakStatement)
     {
-        debug(verbose) writeln("BreakStatement");
+        debug_log("BreakStatement");
 
         put("break");
         if (breakStatement.label != tok!"")
@@ -545,7 +555,7 @@ class Formatter(Sink)
 
     void format(const BaseClass baseClass)
     {
-        debug(verbose) writeln("BaseClass");
+        debug_log("BaseClass");
         with(baseClass)
         {
             if (type2) format(type2);
@@ -554,7 +564,7 @@ class Formatter(Sink)
 
     void format(const BaseClassList baseClassList)
     {
-        debug(verbose) writeln("BaseClassList");
+        debug_log("BaseClassList");
         put(" : ");
         foreach(count, item; baseClassList.items)
         {
@@ -566,7 +576,7 @@ class Formatter(Sink)
 
     void format(const CaseRangeStatement caseRangeStatement)
     {
-        debug(verbose) writeln("CaseRangeStatement");
+        debug_log("CaseRangeStatement");
 
         /**
         AssignExpression low;
@@ -592,7 +602,7 @@ class Formatter(Sink)
 
     void format(const CaseStatement caseStatement)
     {
-        debug(verbose) writeln("CaseStatement");
+        debug_log("CaseStatement");
 
         /**
         ArgumentList argumentList;
@@ -614,7 +624,7 @@ class Formatter(Sink)
 
     void format(const CastExpression castExpression)
     {
-        debug(verbose) writeln("CastExpression");
+        debug_log("CastExpression");
 
         /**
         Type type;
@@ -638,7 +648,7 @@ class Formatter(Sink)
 
     void format(const CastQualifier qual)
     {
-        debug(verbose) writeln("CastQualifier");
+        debug_log("CastQualifier");
 
         /**
         Token first;
@@ -655,7 +665,7 @@ class Formatter(Sink)
 
     void format(const Catch catch_)
     {
-        debug(verbose) writeln("Catch");
+        debug_log("Catch");
 
         /**
         Type type;
@@ -679,7 +689,7 @@ class Formatter(Sink)
 
     void format(const Catches catches)
     {
-        debug(verbose) writeln("Catches");
+        debug_log("Catches");
 
         /**
         Catch[] catches;
@@ -694,7 +704,7 @@ class Formatter(Sink)
 
     void format(const ClassDeclaration decl, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("ClassDeclaration");
+        debug_log("ClassDeclaration");
 
         /**
         Token name;
@@ -731,7 +741,7 @@ class Formatter(Sink)
 
     void format(const CmpExpression cmpExpression)
     {
-        debug(verbose) writeln("CmpExpression");
+        debug_log("CmpExpression");
 
         /**
         ExpressionNode shiftExpression;
@@ -753,7 +763,7 @@ class Formatter(Sink)
 
     void format(const CompileCondition compileCondition)
     {
-        debug(verbose) writeln("CompileCondition");
+        debug_log("CompileCondition");
 
         /**
         VersionCondition versionCondition;
@@ -785,7 +795,7 @@ class Formatter(Sink)
 
     void format(const ConditionalDeclaration decl, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("ConditionalDeclaration");
+        debug_log("ConditionalDeclaration");
 
         /**
         CompileCondition compileCondition;
@@ -806,7 +816,7 @@ class Formatter(Sink)
 
     void format(const ConditionalStatement stmnt)
     {
-        debug(verbose) writeln("ConditionalStatement");
+        debug_log("ConditionalStatement");
 
         /**
         CompileCondition compileCondition;
@@ -841,7 +851,7 @@ class Formatter(Sink)
 
     void format(const Constraint constraint)
     {
-        debug(verbose) writeln("Constraint");
+        debug_log("Constraint");
 
         if (constraint.expression)
         {
@@ -856,7 +866,7 @@ class Formatter(Sink)
 
     void format(const Constructor constructor, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("Constructor");
+        debug_log("Constructor");
 
         /**
         Parameters parameters;
@@ -900,7 +910,7 @@ class Formatter(Sink)
 
     void format(const ContinueStatement continueStatement)
     {
-        debug(verbose) writeln("ContinueStatement");
+        debug_log("ContinueStatement");
 
         put("continue");
         if (continueStatement.label != tok!"")
@@ -913,7 +923,7 @@ class Formatter(Sink)
 
     void format(const DebugCondition debugCondition)
     {
-        debug(verbose) writeln("DebugCondition");
+        debug_log("DebugCondition");
 
         put("debug");
         if (debugCondition.identifierOrInteger != tok!"")
@@ -926,7 +936,7 @@ class Formatter(Sink)
 
     void format(const DebugSpecification debugSpecification)
     {
-        debug(verbose) writeln("DebugSpecification");
+        debug_log("DebugSpecification");
 
         newThing(What.other);
         put("debug = ");
@@ -936,7 +946,7 @@ class Formatter(Sink)
 
     void format(const Declaration declaration)
     {
-        debug(verbose) writeln("Declaration");
+        debug_log("Declaration");
 
         with(declaration)
         {
@@ -962,7 +972,7 @@ class Formatter(Sink)
 
     void format(const DeclarationOrStatement declarationsOrStatement)
     {
-        debug(verbose) writeln("DeclarationOrStatement");
+        debug_log("DeclarationOrStatement");
 
         with(declarationsOrStatement)
             declaration !is null ? format(declaration) : format(statement);
@@ -970,7 +980,7 @@ class Formatter(Sink)
 
     void format(const DeclarationsAndStatements declarationsAndStatements)
     {
-        debug(verbose) writeln("DeclarationsAndStatements");
+        debug_log("DeclarationsAndStatements");
 
         foreach(ds; declarationsAndStatements.declarationsAndStatements)
             format(ds);
@@ -978,7 +988,7 @@ class Formatter(Sink)
 
     void format(const Declarator declarator)
     {
-        debug(verbose) writeln("Declarator");
+        debug_log("Declarator");
 
         /**
         Token name;
@@ -1002,7 +1012,7 @@ class Formatter(Sink)
 
     void format(const DefaultStatement defaultStatement)
     {
-        debug(verbose) writeln("DefaultStatement");
+        debug_log("DefaultStatement");
 
         /**
         DeclarationsAndStatements declarationsAndStatements;
@@ -1014,7 +1024,7 @@ class Formatter(Sink)
 
     void format(const DeleteExpression deleteExpression)
     {
-        debug(verbose) writeln("DeleteExpression");
+        debug_log("DeleteExpression");
 
         put("delete ");
         format(deleteExpression.unaryExpression);
@@ -1022,7 +1032,7 @@ class Formatter(Sink)
 
     void format(const DeleteStatement deleteStatement)
     {
-        debug(verbose) writeln("DeleteStatement");
+        debug_log("DeleteStatement");
 
         format(deleteStatement.deleteExpression);
         put(";");
@@ -1030,8 +1040,7 @@ class Formatter(Sink)
 
     void format(const Deprecated deprecated_)
     {
-        debug (verbose)
-            writeln("Deprecated");
+        debug_log("Deprecated");
         put("deprecated");
         if (deprecated_.assignExpression !is null)
         {
@@ -1043,7 +1052,7 @@ class Formatter(Sink)
 
     void format(const Destructor destructor, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("Destructor");
+        debug_log("Destructor");
 
         /**
         FunctionBody functionBody;
@@ -1061,7 +1070,7 @@ class Formatter(Sink)
 
     void format(const DoStatement doStatement)
     {
-        debug(verbose) writeln("DoStatement");
+        debug_log("DoStatement");
 
         /**
         StatementNoCaseNoDefault statementNoCaseNoDefault;
@@ -1082,7 +1091,7 @@ class Formatter(Sink)
 
     void format(const EnumBody enumBody)
     {
-        debug(verbose) writeln("EnumBody");
+        debug_log("EnumBody");
 
         newline();
         startBlock();
@@ -1104,7 +1113,7 @@ class Formatter(Sink)
 
     void format(const EnumDeclaration enumDeclaration, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("EnumDeclaration");
+        debug_log("EnumDeclaration");
 
         /**
         Token name;
@@ -1136,7 +1145,7 @@ class Formatter(Sink)
 
     void format(const EnumMember enumMember)
     {
-        debug(verbose) writeln("EnumMember");
+        debug_log("EnumMember");
 
         /**
         Token name;
@@ -1160,7 +1169,7 @@ class Formatter(Sink)
 
     void format(const EponymousTemplateDeclaration decl)
     {
-        debug(verbose) writeln("EponymousTemplateDeclaration");
+        debug_log("EponymousTemplateDeclaration");
 
         /**
         Token name;
@@ -1182,14 +1191,14 @@ class Formatter(Sink)
 
     void format(const EqualExpression equalExpression)
     {
-        debug(verbose) writeln("EqualExpression");
+        debug_log("EqualExpression");
 
         mixin(binary("equalExpression"));
     }
 
     void format(const Expression expression)
     {
-        debug(verbose) writeln("Expression");
+        debug_log("Expression");
 
         foreach(count, item; expression.items)
         {
@@ -1201,7 +1210,7 @@ class Formatter(Sink)
 
     void format(const ExpressionNode n)
     {
-        debug(verbose) writeln("ExpressionNode");
+        debug_log("ExpressionNode");
 
         if (cast(AddExpression) n) format(cast(AddExpression) n);
         else if (cast(AndAndExpression) n) format(cast(AndAndExpression) n);
@@ -1250,7 +1259,7 @@ class Formatter(Sink)
 
     void format(const ExpressionStatement expressionStatement)
     {
-        debug(verbose) writeln("ExpressionStatement");
+        debug_log("ExpressionStatement");
 
         if (expressionStatement.expression)
             format(expressionStatement.expression);
@@ -1259,14 +1268,14 @@ class Formatter(Sink)
 
     void format(const FinalSwitchStatement finalSwitchStatement)
     {
-        debug(verbose) writeln("FinalSwitchStatement");
+        debug_log("FinalSwitchStatement");
 
         format(finalSwitchStatement.switchStatement, true);
     }
 
     void format(const Finally finally_)
     {
-        debug(verbose) writeln("Finally");
+        debug_log("Finally");
 
         put("finally");
         format(finally_.declarationOrStatement);
@@ -1274,7 +1283,7 @@ class Formatter(Sink)
 
     void format(const ForStatement forStatement)
     {
-        debug(verbose) writeln("ForStatement");
+        debug_log("ForStatement");
 
         /**
         DeclarationOrStatement initialization;
@@ -1302,7 +1311,7 @@ class Formatter(Sink)
 
     void format(const ForeachStatement foreachStatement)
     {
-        debug(verbose) writeln("ForeachStatement");
+        debug_log("ForeachStatement");
 
         /**
         IdType type;
@@ -1339,7 +1348,7 @@ class Formatter(Sink)
 
     void format(const ForeachType foreachType)
     {
-        debug(verbose) writeln("ForeachType");
+        debug_log("ForeachType");
 
         /**
         IdType[] typeConstructors;
@@ -1365,7 +1374,7 @@ class Formatter(Sink)
 
     void format(const ForeachTypeList foreachTypeList)
     {
-        debug(verbose) writeln("ForeachTypeList");
+        debug_log("ForeachTypeList");
 
         /**
         ForeachType[] items;
@@ -1381,7 +1390,7 @@ class Formatter(Sink)
 
     void format(const FunctionAttribute functionAttribute)
     {
-        debug(verbose) writeln("FunctionAttribute");
+        debug_log("FunctionAttribute");
 
         /**
         Token token;
@@ -1401,7 +1410,7 @@ class Formatter(Sink)
 
     void format(const FunctionBody functionBody)
     {
-        debug(verbose) writeln("FunctionBody");
+        debug_log("FunctionBody");
 
         with(functionBody)
         {
@@ -1421,7 +1430,7 @@ class Formatter(Sink)
 
     void format(const FunctionCallExpression functionCallExpression)
     {
-        debug(verbose) writeln("FunctionCallExpression");
+        debug_log("FunctionCallExpression");
 
         /**
         Type type;
@@ -1441,7 +1450,7 @@ class Formatter(Sink)
 
     void format(const FunctionDeclaration decl, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("FunctionDeclaration");
+        debug_log("FunctionDeclaration");
 
         /**
         bool hasAuto;
@@ -1484,7 +1493,7 @@ class Formatter(Sink)
 
     void format(const FunctionLiteralExpression functionLiteralExpression)
     {
-        debug(verbose) writeln("FunctionLiteralExpression");
+        debug_log("FunctionLiteralExpression");
         /**
         ExpressionNode assignExpression;
         FunctionAttribute[] functionAttributes;
@@ -1527,7 +1536,7 @@ class Formatter(Sink)
 
     void format(const GotoStatement gotoStatement)
     {
-        debug(verbose) writeln("GotoStatement");
+        debug_log("GotoStatement");
 
         put("goto ");
         gotoStatement.label != tok!"" ?
@@ -1538,7 +1547,7 @@ class Formatter(Sink)
 
     void format(const IdentifierChain identifierChain)
     {
-        debug(verbose) writeln("IdentifierChain");
+        debug_log("IdentifierChain");
 
         foreach(count, ident; identifierChain.identifiers)
         {
@@ -1549,7 +1558,7 @@ class Formatter(Sink)
 
     void format(const IdentifierList identifierList)
     {
-        debug(verbose) writeln("IdentifierList");
+        debug_log("IdentifierList");
         foreach(count, ident; identifierList.identifiers)
         {
             if (count) put(", ");
@@ -1559,7 +1568,7 @@ class Formatter(Sink)
 
     void format(const IdentifierOrTemplateChain identifierOrTemplateChain)
     {
-        debug(verbose) writeln("IdentifierOrTemplateChain");
+        debug_log("IdentifierOrTemplateChain");
 
         with(identifierOrTemplateChain)
         {
@@ -1573,7 +1582,7 @@ class Formatter(Sink)
 
     void format(const IdentifierOrTemplateInstance identifierOrTemplateInstance)
     {
-        debug(verbose) writeln("IdentifierOrTemplateInstance");
+        debug_log("IdentifierOrTemplateInstance");
 
         with(identifierOrTemplateInstance)
         {
@@ -1585,7 +1594,7 @@ class Formatter(Sink)
 
     void format(const IdentityExpression identityExpression)
     {
-        debug(verbose) writeln("IdentityExpression");
+        debug_log("IdentityExpression");
 
         with(identityExpression)
         {
@@ -1597,7 +1606,7 @@ class Formatter(Sink)
 
     void format(const IfStatement ifStatement)
     {
-        debug(verbose) writeln("IfStatement");
+        debug_log("IfStatement");
 
         /**
         Token identifier;
@@ -1653,7 +1662,7 @@ class Formatter(Sink)
 
     void format(const ImportBind importBind)
     {
-        debug(verbose) writeln("ImportBind");
+        debug_log("ImportBind");
 
         format(importBind.left);
         if (importBind.right != tok!"")
@@ -1665,7 +1674,7 @@ class Formatter(Sink)
 
     void format(const ImportBindings importBindings)
     {
-        debug(verbose) writeln("ImportBindings");
+        debug_log("ImportBindings");
 
         /**
         SingleImport singleImport;
@@ -1686,7 +1695,7 @@ class Formatter(Sink)
 
     void format(const ImportDeclaration importDeclaration, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("ImportDeclaration");
+        debug_log("ImportDeclaration");
 
         /**
         SingleImport[] singleImports;
@@ -1731,7 +1740,7 @@ class Formatter(Sink)
 
     void format(const ImportExpression importExpression)
     {
-        debug(verbose) writeln("ImportExpression");
+        debug_log("ImportExpression");
 
         put("import (");
         format(importExpression.assignExpression);
@@ -1750,7 +1759,7 @@ class Formatter(Sink)
 
     void format(const IndexExpression indexExpression)
     {
-        debug(verbose) writeln("IndexExpression");
+        debug_log("IndexExpression");
 
         /**
         UnaryExpression unaryExpression;
@@ -1773,7 +1782,7 @@ class Formatter(Sink)
 
     void format(const InExpression inExpression)
     {
-        debug(verbose) writeln("InExpression");
+        debug_log("InExpression");
 
         with(inExpression)
         {
@@ -1785,27 +1794,27 @@ class Formatter(Sink)
 
     void format(const InStatement inStatement)
     {
-        debug(verbose) writeln("InStatement");
+        debug_log("InStatement");
         put("in");
         format(inStatement.blockStatement);
     }
 
     void format(const Initialize initialize)
     {
-        debug(verbose) writeln("Initialize");
+        debug_log("Initialize");
         assert(false);
     }
 
     void format(const Initializer initializer)
     {
-        debug(verbose) writeln("Initializer");
+        debug_log("Initializer");
 
         initializer.nonVoidInitializer ? format(initializer.nonVoidInitializer) : put("void");
     }
 
     void format(const InterfaceDeclaration interfaceDeclaration, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("InterfaceDeclaration");
+        debug_log("InterfaceDeclaration");
 
         /**
         Token name;
@@ -1844,7 +1853,7 @@ class Formatter(Sink)
 
     void format(const Invariant invariant_, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("Invariant");
+        debug_log("Invariant");
 
         /**
         BlockStatement blockStatement;
@@ -1859,7 +1868,7 @@ class Formatter(Sink)
 
     void format(const IsExpression isExpression)
     {
-        debug(verbose) writeln("IsExpression");
+        debug_log("IsExpression");
 
         /**
         Type type;
@@ -1898,7 +1907,7 @@ class Formatter(Sink)
 
     void format(const KeyValuePair keyValuePair)
     {
-        debug(verbose) writeln("KeyValuePair");
+        debug_log("KeyValuePair");
 
         /**
         AssignExpression key;
@@ -1912,7 +1921,7 @@ class Formatter(Sink)
 
     void format(const KeyValuePairs keyValuePairs)
     {
-        debug(verbose) writeln("KeyValuePairs");
+        debug_log("KeyValuePairs");
 
         /**
         KeyValuePair[] keyValuePairs;
@@ -1928,7 +1937,7 @@ class Formatter(Sink)
 
     void format(const LabeledStatement stmt)
     {
-        debug(verbose) writeln("LabeledStatement");
+        debug_log("LabeledStatement");
 
         /**
         Token identifier;
@@ -1943,7 +1952,7 @@ class Formatter(Sink)
 
     void format(const LastCatch lastCatch)
     {
-        debug(verbose) writeln("LastCatch");
+        debug_log("LastCatch");
 
         put("catch");
         format(lastCatch.statementNoCaseNoDefault);
@@ -1951,7 +1960,7 @@ class Formatter(Sink)
 
     void format(const LinkageAttribute linkageAttribute)
     {
-        debug(verbose) writeln("LinkageAttribute");
+        debug_log("LinkageAttribute");
 
         /**
         Token identifier;
@@ -1981,7 +1990,7 @@ class Formatter(Sink)
 
     void format(const MemberFunctionAttribute memberFunctionAttribute)
     {
-        debug(verbose) writeln("MemberFunctionAttribute");
+        debug_log("MemberFunctionAttribute");
 
         /**
         IdType tokenType;
@@ -1997,7 +2006,7 @@ class Formatter(Sink)
 
     void format(const MixinDeclaration mixinDeclaration, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("MixinDeclaration");
+        debug_log("MixinDeclaration");
 
         /**
         MixinExpression mixinExpression;
@@ -2015,7 +2024,7 @@ class Formatter(Sink)
 
     void format(const MixinExpression mixinExpression)
     {
-        debug(verbose) writeln("MixinExpression");
+        debug_log("MixinExpression");
 
         put("mixin (");
         format(mixinExpression.assignExpression);
@@ -2024,7 +2033,7 @@ class Formatter(Sink)
 
     void format(const MixinTemplateDeclaration mixinTemplateDeclaration, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("MixinTemplateDeclaration");
+        debug_log("MixinTemplateDeclaration");
 
         putAttrs(attrs);
         put("mixin ");
@@ -2033,7 +2042,7 @@ class Formatter(Sink)
 
     void format(const MixinTemplateName mixinTemplateName)
     {
-        debug(verbose) writeln("MixinTemplateName");
+        debug_log("MixinTemplateName");
 
         /**
         Symbol symbol;
@@ -2055,7 +2064,7 @@ class Formatter(Sink)
 
     void format(const Module module_)
     {
-        debug(verbose) writeln("Module");
+        debug_log("Module");
 
         /**
         ModuleDeclaration moduleDeclaration;
@@ -2069,7 +2078,7 @@ class Formatter(Sink)
 
     void format(const ModuleDeclaration moduleDeclaration)
     {
-        debug(verbose) writeln("ModuleDeclaration");
+        debug_log("ModuleDeclaration");
         if (moduleDeclaration is null) return;
 
         /**
@@ -2085,13 +2094,13 @@ class Formatter(Sink)
 
     void format(const MulExpression mulExpression)
     {
-        debug(verbose) writeln("MulExpression");
+        debug_log("MulExpression");
         mixin(binary("mulExpression"));
     }
 
     void format(const NewAnonClassExpression newAnonClassExpression)
     {
-        debug(verbose) writeln("NewAnonClassExpression");
+        debug_log("NewAnonClassExpression");
 
         /**
         Arguments allocatorArguments;
@@ -2123,7 +2132,7 @@ class Formatter(Sink)
 
     void format(const NewExpression newExpression)
     {
-        debug(verbose) writeln("NewExpression");
+        debug_log("NewExpression");
 
         /**
         Type type;
@@ -2152,7 +2161,7 @@ class Formatter(Sink)
 
     void format(const NonVoidInitializer nonVoidInitializer)
     {
-        debug(verbose) writeln("NonVoidInitializer");
+        debug_log("NonVoidInitializer");
 
         /**
         AssignExpression assignExpression;
@@ -2170,25 +2179,25 @@ class Formatter(Sink)
 
     void format(const Operands operands)
     {
-        debug(verbose) writeln("Operands");
+        debug_log("Operands");
         assert(false);
     }
 
     void format(const OrExpression orExpression)
     {
-        debug(verbose) writeln("OrExpression");
+        debug_log("OrExpression");
         mixin(binary("orExpression", "|"));
     }
 
     void format(const OrOrExpression orOrExpression)
     {
-        debug(verbose) writeln("OrOrExpression");
+        debug_log("OrOrExpression");
         mixin(binary("orOrExpression", "||"));
     }
 
     void format(const OutStatement stmnt)
     {
-        debug(verbose) writeln("OutStatement");
+        debug_log("OutStatement");
 
         /**
         Token parameter;
@@ -2207,7 +2216,7 @@ class Formatter(Sink)
 
     void format(const Parameter parameter)
     {
-        debug(verbose) writeln("Parameter");
+        debug_log("Parameter");
 
         /**
         IdType[] parameterAttributes;
@@ -2251,7 +2260,7 @@ class Formatter(Sink)
 
     void format(const Parameters parameters)
     {
-        debug(verbose) writeln("Parameters");
+        debug_log("Parameters");
 
         /**
         Parameter[] parameters;
@@ -2275,7 +2284,7 @@ class Formatter(Sink)
 
     void format(const Postblit postblit, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("Postblit");
+        debug_log("Postblit");
 
         /**
         FunctionBody functionBody;
@@ -2299,13 +2308,13 @@ class Formatter(Sink)
 
     void format(const PowExpression powExpression)
     {
-        debug(verbose) writeln("PowExpression");
+        debug_log("PowExpression");
         mixin(binary("powExpression", "^^", true));
     }
 
     void format(const PragmaDeclaration pragmaDeclaration, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("PragmaDeclaration");
+        debug_log("PragmaDeclaration");
 
         /**
         PragmaExpression pragmaExpression;
@@ -2318,7 +2327,7 @@ class Formatter(Sink)
 
     void format(const PragmaExpression pragmaExpression)
     {
-        debug(verbose) writeln("PragmaExpression");
+        debug_log("PragmaExpression");
 
         /**
         Token identifier;
@@ -2337,7 +2346,7 @@ class Formatter(Sink)
 
     void format(const PrimaryExpression primaryExpression)
     {
-        debug(verbose) writeln("PrimaryExpression");
+        debug_log("PrimaryExpression");
 
         /**
         Token dot;
@@ -2397,19 +2406,19 @@ class Formatter(Sink)
 
     void format(const Register register)
     {
-        debug(verbose) writeln("Register");
+        debug_log("Register");
         assert(false);
     }
 
     void format(const RelExpression relExpression)
     {
-        debug(verbose) writeln("RelExpression");
+        debug_log("RelExpression");
         mixin(binary("relExpression"));
     }
 
     void format(const ReturnStatement returnStatement)
     {
-        debug(verbose) writeln("ReturnStatement");
+        debug_log("ReturnStatement");
 
         put("return");
         if (returnStatement.expression)
@@ -2422,7 +2431,7 @@ class Formatter(Sink)
 
     void format(const ScopeGuardStatement scopeGuardStatement)
     {
-        debug(verbose) writeln("ScopeGuardStatement");
+        debug_log("ScopeGuardStatement");
 
         /**
         Token identifier;
@@ -2442,7 +2451,7 @@ class Formatter(Sink)
 
     void format(const SharedStaticConstructor sharedStaticConstructor, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("SharedStaticConstructor");
+        debug_log("SharedStaticConstructor");
 
         with(sharedStaticConstructor)
         {
@@ -2456,7 +2465,7 @@ class Formatter(Sink)
 
     void format(const SharedStaticDestructor sharedStaticDestructor, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("SharedStaticDestructor");
+        debug_log("SharedStaticDestructor");
 
         with(sharedStaticDestructor)
         {
@@ -2470,13 +2479,13 @@ class Formatter(Sink)
 
     void format(const ShiftExpression shiftExpression)
     {
-        debug(verbose) writeln("ShiftExpression");
+        debug_log("ShiftExpression");
         mixin(binary("shiftExpression"));
     }
 
     void format(const SingleImport singleImport)
     {
-        debug(verbose) writeln("SingleImport");
+        debug_log("SingleImport");
 
         /**
         Token rename;
@@ -2493,7 +2502,7 @@ class Formatter(Sink)
 
     void format(const Statement statement)
     {
-        debug(verbose) writeln("Statement");
+        debug_log("Statement");
 
         /**
         StatementNoCaseNoDefault statementNoCaseNoDefault;
@@ -2519,7 +2528,7 @@ class Formatter(Sink)
 
     void format(const StatementNoCaseNoDefault statementNoCaseNoDefault)
     {
-        debug(verbose) writeln("StatementNoCaseNoDefault");
+        debug_log("StatementNoCaseNoDefault");
 
         string mix(string s) { return "if (" ~ s ~ ") format(" ~ s ~ ");"; }
 
@@ -2561,7 +2570,7 @@ class Formatter(Sink)
 
     void format(const StaticAssertDeclaration staticAssertDeclaration, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("StaticAssertDeclaration");
+        debug_log("StaticAssertDeclaration");
 
         newThing(What.other);
         putAttrs(attrs);
@@ -2571,7 +2580,7 @@ class Formatter(Sink)
 
     void format(const StaticAssertStatement staticAssertStatement)
     {
-        debug(verbose) writeln("StaticAssertStatement");
+        debug_log("StaticAssertStatement");
 
         put("static ");
         format(staticAssertStatement.assertExpression);
@@ -2579,7 +2588,7 @@ class Formatter(Sink)
 
     void format(const StaticConstructor staticConstructor, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("StaticConstructor");
+        debug_log("StaticConstructor");
 
         putAttrs(attrs);
         put("static this()");
@@ -2588,7 +2597,7 @@ class Formatter(Sink)
 
     void format(const StaticDestructor staticDestructor, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("StaticDestructor");
+        debug_log("StaticDestructor");
 
         putAttrs(attrs);
         put("static ~this()");
@@ -2597,7 +2606,7 @@ class Formatter(Sink)
 
     void format(const StaticIfCondition staticIfCondition)
     {
-        debug(verbose) writeln("StaticIfCondition");
+        debug_log("StaticIfCondition");
 
         put("static if (");
         format(staticIfCondition.assignExpression);
@@ -2606,7 +2615,7 @@ class Formatter(Sink)
 
     void format(const StorageClass storageClass)
     {
-        debug(verbose) writeln("StorageClass");
+        debug_log("StorageClass");
 
         /**
         AtAttribute atAttribute;
@@ -2626,7 +2635,7 @@ class Formatter(Sink)
 
     void format(const StructBody structBody)
     {
-        debug(verbose) writeln("StructBody");
+        debug_log("StructBody");
 
         if (structBody.declarations.length > 0)
         {
@@ -2644,7 +2653,7 @@ class Formatter(Sink)
 
     void format(const StructDeclaration decl, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("StructDeclaration");
+        debug_log("StructDeclaration");
 
         /**
         Token name;
@@ -2677,7 +2686,7 @@ class Formatter(Sink)
 
     void format(const StructInitializer structInitializer)
     {
-        debug(verbose) writeln("StructInitializer");
+        debug_log("StructInitializer");
 
         put("{");
         format(structInitializer.structMemberInitializers);
@@ -2686,7 +2695,7 @@ class Formatter(Sink)
 
     void format(const StructMemberInitializer structMemberInitializer)
     {
-        debug(verbose) writeln("StructMemberInitializer");
+        debug_log("StructMemberInitializer");
 
         /**
         Token identifier;
@@ -2706,7 +2715,7 @@ class Formatter(Sink)
 
     void format(const StructMemberInitializers structMemberInitializers)
     {
-        debug(verbose) writeln("StructMemberInitializers");
+        debug_log("StructMemberInitializers");
 
         foreach(count, mem; structMemberInitializers.structMemberInitializers)
         {
@@ -2717,7 +2726,7 @@ class Formatter(Sink)
 
     void format(const SwitchStatement switchStatement, bool isFinal = false)
     {
-        debug(verbose) writeln("SwitchStatement");
+        debug_log("SwitchStatement");
 
         /**
         Expression expression;
@@ -2745,7 +2754,7 @@ class Formatter(Sink)
 
     void format(const Symbol symbol)
     {
-        debug(verbose) writeln("Symbol");
+        debug_log("Symbol");
 
         if (symbol.dot)
             put(".");
@@ -2754,7 +2763,7 @@ class Formatter(Sink)
 
     void format(const SynchronizedStatement synchronizedStatement)
     {
-        debug(verbose) writeln("SynchronizedStatement");
+        debug_log("SynchronizedStatement");
 
         /**
         Expression expression;
@@ -2776,7 +2785,7 @@ class Formatter(Sink)
 
     void format(const TemplateAliasParameter templateAliasParameter)
     {
-        debug(verbose) writeln("TemplateAliasParameter");
+        debug_log("TemplateAliasParameter");
 
         /**
         Type type;
@@ -2821,7 +2830,7 @@ class Formatter(Sink)
 
     void format(const TemplateArgument templateArgument)
     {
-        debug(verbose) writeln("TemplateArgument");
+        debug_log("TemplateArgument");
 
         /**
         Type type;
@@ -2837,7 +2846,7 @@ class Formatter(Sink)
 
     void format(const TemplateArgumentList templateArgumentList, bool parens = true)
     {
-        debug(verbose) writeln("TemplateArgumentList");
+        debug_log("TemplateArgumentList");
 
         if (parens) put("!(");
         foreach(count, arg; templateArgumentList.items)
@@ -2850,7 +2859,7 @@ class Formatter(Sink)
 
     void format(const TemplateArguments templateArguments)
     {
-        debug(verbose) writeln("TemplateArguments");
+        debug_log("TemplateArguments");
 
         /**
         TemplateArgumentList templateArgumentList;
@@ -2867,7 +2876,7 @@ class Formatter(Sink)
 
     void format(const TemplateDeclaration templateDeclaration, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("TemplateDeclaration");
+        debug_log("TemplateDeclaration");
 
         /**
         Token name;
@@ -2905,7 +2914,7 @@ class Formatter(Sink)
 
     void format(const TemplateInstance templateInstance)
     {
-        debug(verbose) writeln("TemplateInstance");
+        debug_log("TemplateInstance");
 
         /**
         Token identifier;
@@ -2921,7 +2930,7 @@ class Formatter(Sink)
 
     void format(const TemplateMixinExpression templateMixinExpression)
     {
-        debug(verbose) writeln("TemplateMixinExpression");
+        debug_log("TemplateMixinExpression");
 
         /**
         Token identifier;
@@ -2941,7 +2950,7 @@ class Formatter(Sink)
 
     void format(const TemplateParameter templateParameter)
     {
-        debug(verbose) writeln("TemplateParameter");
+        debug_log("TemplateParameter");
 
         with(templateParameter)
         {
@@ -2960,7 +2969,7 @@ class Formatter(Sink)
 
     void format(const TemplateParameterList templateParameterList)
     {
-        debug(verbose) writeln("TemplateParameterList");
+        debug_log("TemplateParameterList");
 
         foreach(i, param; templateParameterList.items)
         {
@@ -2971,7 +2980,7 @@ class Formatter(Sink)
 
     void format(const TemplateParameters templateParameters)
     {
-        debug(verbose) writeln("TemplateParameters");
+        debug_log("TemplateParameters");
 
         with(templateParameters)
         {
@@ -2984,7 +2993,7 @@ class Formatter(Sink)
 
     void format(const TemplateSingleArgument templateSingleArgument)
     {
-        debug(verbose) writeln("TemplateSingleArgument");
+        debug_log("TemplateSingleArgument");
 
         /**
         Token token;
@@ -2996,7 +3005,7 @@ class Formatter(Sink)
 
     void format(const TemplateThisParameter templateThisParameter)
     {
-        debug(verbose) writeln("TemplateThisParameter");
+        debug_log("TemplateThisParameter");
 
         with(templateThisParameter)
         {
@@ -3008,7 +3017,7 @@ class Formatter(Sink)
 
     void format(const TemplateTupleParameter templateTupleParameter)
     {
-        debug(verbose) writeln("TemplateTupleParameter");
+        debug_log("TemplateTupleParameter");
 
         format(templateTupleParameter.identifier);
         put("...");
@@ -3016,7 +3025,7 @@ class Formatter(Sink)
 
     void format(const TemplateTypeParameter templateTypeParameter)
     {
-        debug(verbose) writeln("TemplateTypeParameter");
+        debug_log("TemplateTypeParameter");
 
         /**
         Token identifier;
@@ -3042,7 +3051,7 @@ class Formatter(Sink)
 
     void format(const TemplateValueParameter templateValueParameter)
     {
-        debug(verbose) writeln("TemplateValueParameter");
+        debug_log("TemplateValueParameter");
 
         /**
         Type type;
@@ -3073,7 +3082,7 @@ class Formatter(Sink)
 
     void format(const TemplateValueParameterDefault templateValueParameterDefault)
     {
-        debug(verbose) writeln("TemplateValueParameterDefault");
+        debug_log("TemplateValueParameterDefault");
 
         with(templateValueParameterDefault)
             assignExpression ? format(assignExpression) : format(token);
@@ -3081,7 +3090,7 @@ class Formatter(Sink)
 
     void format(const TernaryExpression expr)
     {
-        debug(verbose) writeln("TernaryExpression");
+        debug_log("TernaryExpression");
 
         /**
         ExpressionNode orOrExpression;
@@ -3102,7 +3111,7 @@ class Formatter(Sink)
 
     void format(const ThrowStatement throwStatement)
     {
-        debug(verbose) writeln("ThrowStatement");
+        debug_log("ThrowStatement");
 
         put("throw ");
         assert(throwStatement.expression);
@@ -3112,13 +3121,13 @@ class Formatter(Sink)
 
     void format(const Token token)
     {
-        debug(verbose) writeln("Token ", tokenRep(token));
+        debug_log("Token ", tokenRep(token));
         put(tokenRep(token));
     }
 
     void format(const TraitsExpression traitExpr)
     {
-        debug(verbose) writeln("TraitsExpression");
+        debug_log("TraitsExpression");
 
         /**
         Token identifier;
@@ -3134,7 +3143,7 @@ class Formatter(Sink)
 
     void format(const TryStatement tryStatement)
     {
-        debug(verbose) writeln("TryStatement");
+        debug_log("TryStatement");
 
         /**
         DeclarationOrStatement declarationOrStatement;
@@ -3153,7 +3162,7 @@ class Formatter(Sink)
 
     void format(const Type type)
     {
-        debug(verbose) writeln("Type(");
+        debug_log("Type(");
 
         /**
         IdType[] typeConstructors;
@@ -3173,12 +3182,12 @@ class Formatter(Sink)
         foreach (suffix; type.typeSuffixes)
             format(suffix);
 
-        debug(verbose) writeln(")");
+        debug_log(")");
     }
 
     void format(const Type2 type2)
     {
-        debug(verbose) writeln("Type2");
+        debug_log("Type2");
 
         /**
         IdType builtinType;
@@ -3223,7 +3232,7 @@ class Formatter(Sink)
 
     void format(const TypeSpecialization typeSpecialization)
     {
-        debug(verbose) writeln("TypeSpecialization");
+        debug_log("TypeSpecialization");
 
         /**
         Token token;
@@ -3239,7 +3248,7 @@ class Formatter(Sink)
 
     void format(const TypeSuffix typeSuffix)
     {
-        debug(verbose) writeln("TypeSuffix");
+        debug_log("TypeSuffix");
 
         /**
         Token delegateOrFunction;
@@ -3310,7 +3319,7 @@ class Formatter(Sink)
 
     void format(const TypeidExpression idExpr)
     {
-        debug(verbose) writeln("TypeidExpression");
+        debug_log("TypeidExpression");
 
         /**
         Type type;
@@ -3324,7 +3333,7 @@ class Formatter(Sink)
 
     void format(const TypeofExpression typeofExpr)
     {
-        debug(verbose) writeln("TypeofExpression");
+        debug_log("TypeofExpression");
 
         /**
         Expression expression;
@@ -3338,7 +3347,7 @@ class Formatter(Sink)
 
     void format(const UnaryExpression unary)
     {
-        debug(verbose) writeln("UnaryExpression(");
+        debug_log("UnaryExpression(");
 
         /**
         Type type;
@@ -3398,12 +3407,12 @@ class Formatter(Sink)
             }
         }
 
-        debug(verbose) writeln(")");
+        debug_log(")");
     }
 
     void format(const UnionDeclaration decl, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("UnionDeclaration");
+        debug_log("UnionDeclaration");
 
         /**
         Token name;
@@ -3430,7 +3439,7 @@ class Formatter(Sink)
 
     void format(const Unittest unittest_, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("Unittest");
+        debug_log("Unittest");
 
         /**
         BlockStatement blockStatement;
@@ -3446,7 +3455,7 @@ class Formatter(Sink)
 
     void format(const VariableDeclaration decl, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("VariableDeclaration");
+        debug_log("VariableDeclaration");
 
         /**
         Type type;
@@ -3482,7 +3491,7 @@ class Formatter(Sink)
 
     void format(const Vector vector)
     {
-        debug(verbose) writeln("Vector");
+        debug_log("Vector");
 
         put("__vector(");
         format(vector.type);
@@ -3491,7 +3500,7 @@ class Formatter(Sink)
 
     void format(const VersionCondition versionCondition)
     {
-        debug(verbose) writeln("VersionCondition");
+        debug_log("VersionCondition");
 
         put("version (");
         format(versionCondition.token);
@@ -3500,7 +3509,7 @@ class Formatter(Sink)
 
     void format(const VersionSpecification ver, const Attribute[] attrs = null)
     {
-        debug(verbose) writeln("VersionSpecification");
+        debug_log("VersionSpecification");
 
         newThing(What.other);
         putAttrs(attrs);
@@ -3511,7 +3520,7 @@ class Formatter(Sink)
 
     void format(const WhileStatement stmt)
     {
-        debug(verbose) writeln("WhileStatement");
+        debug_log("WhileStatement");
 
         /**
         Expression expression;
@@ -3527,7 +3536,7 @@ class Formatter(Sink)
 
     void format(const WithStatement stmt)
     {
-        debug(verbose) writeln("WithStatement");
+        debug_log("WithStatement");
 
         /**
         Expression expression;
@@ -3543,7 +3552,7 @@ class Formatter(Sink)
 
     void format(const XorExpression xorExpression)
     {
-        debug(verbose) writeln("XorExpression");
+        debug_log("XorExpression");
         mixin(binary("xorExpression", "^"));
     }
 
