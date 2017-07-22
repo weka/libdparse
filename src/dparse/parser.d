@@ -3941,8 +3941,8 @@ class Parser
             if (m.moduleDeclaration is null)
                 allocator.rollback(c);
         }else{
-            warn("WARN: file '%s' does not seem to be a module (no 'module' declaration found);"
-                 ~ " this is syntactically acceptable, but the instrumenter may not find it all that amusing.".format(fileName));
+            warn(("WARN: file '%s' does not seem to be a module (no 'module' declaration found);"
+                  ~ " this is syntactically acceptable, but the instrumenter may not find it all that amusing.").format(fileName));
         }
 
         StackBuffer declarations;
