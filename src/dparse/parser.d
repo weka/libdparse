@@ -3176,7 +3176,7 @@ class Parser
         while (moreTokens())
         {
             auto c = allocator.setCheckpoint();
-            if (!identifiersOrTemplateInstances.put(parseIdentifierOrTemplateInstance()))
+            if (!identifiersOrTemplateInstances.put(parseIdentifierOrTemplateInstanceWithIndices()))
             {
                 allocator.rollback(c);
                 if (identifiersOrTemplateInstances.length == 0)
@@ -3184,36 +3184,36 @@ class Parser
                 else
                     break;
             }
-            if (currentIs(tok!"["))
-            {
-                auto b = setBookmark();
-                advance();
-                if (!currentIs(tok!"]"))
-                {
-                    mixin(parseNodeQ!(`node.indexer`, `AssignExpression`));
-                }
-                expect(tok!"]");
-                if (node.indexer is null)
-                {
-                    // [] is a TypeSuffix
-                    goToBookmark(b);
-                    return node;
-                }
-                if (!currentIs(tok!"."))
-                {
-                    goToBookmark(b);
-                }
-                else
-                {
-                    abandonBookmark(b);
-                }
-            }
             if (!currentIs(tok!"."))
                 break;
             else
                 advance();
         }
-        ownArray(node.identifiersOrTemplateInstances, identifiersOrTemplateInstances);
+        ownArray(node.identifiersOrTemplateInstancesWithIndices, identifiersOrTemplateInstances);
+        return node;
+    }
+
+    IdentifierOrTemplateInstanceWithIndices parseIdentifierOrTemplateInstanceWithIndices()
+    {
+        mixin(traceEnterAndExit!(__FUNCTION__));
+        auto node = allocator.make!IdentifierOrTemplateInstanceWithIndices;
+        mixin(parseNodeQ!(`node.identifierOrTemplateInstance`, `IdentifierOrTemplateInstance`));
+        StackBuffer indexers;
+        scope(success) ownArray(node.indexers, indexers);
+        while(currentIs(tok!"[")) {
+            auto b = setBookmark();
+            advance();
+            auto c = allocator.setCheckpoint();
+            if(!indexers.put(parseAssignExpression())) {
+                allocator.rollback(c);
+                goToBookmark(b);
+                return node;
+            }
+            // At this point, we are committed to this interpretation:
+            abandonBookmark(b);
+            const rbracket = expect(tok!"]");
+            mixin(nullCheck!`rbracket`);
+        }
         return node;
     }
 

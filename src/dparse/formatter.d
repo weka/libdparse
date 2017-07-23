@@ -1576,10 +1576,25 @@ class Formatter(Sink)
 
         with(identifierOrTemplateChain)
         {
-            foreach(count, ident; identifiersOrTemplateInstances)
+            foreach(count, ident; identifiersOrTemplateInstancesWithIndices)
             {
                 if (count) put(".");
                 format(ident);
+            }
+        }
+    }
+
+    void format(const IdentifierOrTemplateInstanceWithIndices identifierOrTemplateInstanceWithIndices)
+    {
+        debug_log("IdentifierOrTemplateInstanceWithIndices");
+
+        with(identifierOrTemplateInstanceWithIndices)
+        {
+            format(identifierOrTemplateInstance);
+            foreach(indexer; indexers) {
+                put("[");
+                format(indexer);
+                put("]");
             }
         }
     }

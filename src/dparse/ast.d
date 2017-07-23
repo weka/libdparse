@@ -233,6 +233,7 @@ public:
     /** */ void visit(const IdentifierList identifierList) { identifierList.accept(this); }
     /** */ void visit(const IdentifierOrTemplateChain identifierOrTemplateChain) { identifierOrTemplateChain.accept(this); }
     /** */ void visit(const IdentifierOrTemplateInstance identifierOrTemplateInstance) { identifierOrTemplateInstance.accept(this); }
+    /** */ void visit(const IdentifierOrTemplateInstanceWithIndices identifierOrTemplateInstanceWithIndices) { identifierOrTemplateInstanceWithIndices.accept(this); }
     /** */ void visit(const IdentityExpression identityExpression) { identityExpression.accept(this); }
     /** */ void visit(const IfStatement ifStatement) { ifStatement.accept(this); }
     /** */ void visit(const ImportBind importBind) { importBind.accept(this); }
@@ -1816,11 +1817,24 @@ final class IdentifierOrTemplateChain : ASTNode
 public:
     override void accept(ASTVisitor visitor) const
     {
-        mixin (visitIfNotNull!(identifiersOrTemplateInstances, indexer));
+        mixin (visitIfNotNull!(identifiersOrTemplateInstancesWithIndices));
     }
 
-    /** */ IdentifierOrTemplateInstance[] identifiersOrTemplateInstances;
-    /** */ ExpressionNode indexer;
+    /** */ IdentifierOrTemplateInstanceWithIndices[] identifiersOrTemplateInstancesWithIndices;
+    mixin OpEquals;
+}
+
+final class IdentifierOrTemplateInstanceWithIndices : ASTNode
+{
+public:
+    override void accept(ASTVisitor visitor) const
+    {
+        mixin (visitIfNotNull!(identifierOrTemplateInstance, indexers));
+    }
+
+    /** */ IdentifierOrTemplateInstance identifierOrTemplateInstance;
+    // Optionally:
+    /** */ ExpressionNode[] indexers;
     mixin OpEquals;
 }
 
