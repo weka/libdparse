@@ -1106,6 +1106,7 @@ final class ClassDeclaration: BaseNode
     /** */ BaseClassList baseClassList;
     /** */ StructBody structBody;
     /** */ string comment;
+    /** */ Attribute[] attributes;
     mixin OpEquals;
 }
 
@@ -2772,6 +2773,7 @@ final class StructDeclaration : BaseNode
     /** */ Constraint constraint;
     /** */ StructBody structBody;
     /** */ string comment;
+    /** */ Attribute[] attributes;
     mixin OpEquals;
 }
 

@@ -1630,11 +1630,12 @@ class Parser
      *     | $(LITERAL 'class') $(LITERAL Identifier) $(RULE templateParameters) ($(LITERAL ':') $(RULE baseClassList))? $(RULE constraint)? $(RULE structBody)
      *     ;)
      */
-    ClassDeclaration parseClassDeclaration()
+    ClassDeclaration parseClassDeclaration(Attribute[] attributes = null)
     {
         mixin(traceEnterAndExit!(__FUNCTION__));
         auto startIndex = index;
         auto node = allocator.make!ClassDeclaration;
+        node.attributes = attributes;
         expect(tok!"class");
         return parseInterfaceOrClass(node, startIndex);
     }
@@ -2158,7 +2159,7 @@ class Parser
                 mixin(parseNodeQ!(`node.aliasDeclaration`, `AliasDeclaration`));
             break;
         case tok!"class":
-            mixin(parseNodeQ!(`node.classDeclaration`, `ClassDeclaration`));
+            mixin(parseNodeWithAttrQ!(`node.classDeclaration`, `ClassDeclaration`));
             break;
         case tok!"this":
             if (!mustBeDeclaration && peekIs(tok!"("))
@@ -2286,7 +2287,7 @@ class Parser
                 goto type;
             break;
         case tok!"struct":
-            mixin(parseNodeQ!(`node.structDeclaration`, `StructDeclaration`));
+            mixin(parseNodeWithAttrQ!(`node.structDeclaration`, `StructDeclaration`));
             break;
         case tok!"template":
             mixin(parseNodeQ!(`node.templateDeclaration`, `TemplateDeclaration`));
@@ -6005,11 +6006,12 @@ class Parser
      *     | $(LITERAL 'struct') $(RULE structBody)
      *     ;)
      */
-    StructDeclaration parseStructDeclaration()
+    StructDeclaration parseStructDeclaration(Attribute[] attributes = null)
     {
         mixin(traceEnterAndExit!(__FUNCTION__));
         auto startIndex = index;
         auto node = allocator.make!StructDeclaration;
+        node.attributes = attributes;
         const t = expect(tok!"struct");
         if (currentIs(tok!"identifier"))
             node.name = advance();
@@ -8426,6 +8428,11 @@ protected: final:
     else
     {
         void trace(lazy string) {}
+    }
+
+    template parseNodeWithAttrQ(string VarName, string NodeName)
+    {
+        enum parseNodeWithAttrQ = `{ if ((` ~ VarName ~ ` = parse` ~ NodeName ~ `(node.attributes)) is null) return null; }`;
     }
 
     template parseNodeQ(string VarName, string NodeName)
