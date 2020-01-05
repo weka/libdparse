@@ -4619,6 +4619,10 @@ class Parser
             m.moduleDeclaration = parseModuleDeclaration();
             if (m.moduleDeclaration is null)
                 allocator.rollback(c);
+        } else {
+            import std.stdio : stderr;
+            stderr.writefln("WARN: file '%s' does not seem to be a module (no 'module' declaration found);" ~
+                " this is syntactically acceptable, but the instrumenter may not find it all that amusing.", fileName);
         }
         StackBuffer declarations;
         while (moreTokens())
