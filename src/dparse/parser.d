@@ -2101,7 +2101,7 @@ class Parser
             }
             else if (isAuto == DecType.autoFun)
             {
-                mixin(nullCheck!`node.functionDeclaration = parseFunctionDeclaration(null, true)`);
+                mixin(nullCheck!`node.functionDeclaration = parseFunctionDeclaration(null, node.attributes, true)`);
                 node.tokens = tokens[startIndex .. index];
                 return node;
             }
@@ -2198,7 +2198,7 @@ class Parser
                     if (!currentIs(tok!"="))
                     {
                         goToBookmark(b);
-                        node.functionDeclaration = parseFunctionDeclaration(null, true, node.attributes);
+                        node.functionDeclaration = parseFunctionDeclaration(null, node.attributes, true);
                         mixin (nullCheck!`node.functionDeclaration`);
                     }
                     else
@@ -2327,7 +2327,7 @@ class Parser
                 goToBookmark(b2);
                 if (savedComment && comment is null)
                     comment = savedComment;
-                node.functionDeclaration = parseFunctionDeclaration(t, false);
+                node.functionDeclaration = parseFunctionDeclaration(t, node.attributes, false);
             }
             else abandonBookmark(b2);
             if (!node.variableDeclaration && !node.functionDeclaration)
@@ -3404,8 +3404,7 @@ class Parser
      *     | ($(RULE storageClass)+ | $(RULE _type)) $(LITERAL Identifier) $(RULE templateParameters) $(RULE parameters) $(RULE memberFunctionAttribute)* $(RULE constraint)? ($(RULE functionBody) | $(LITERAL ';'))
      *     ;)
      */
-    FunctionDeclaration parseFunctionDeclaration(Type type = null, bool isAuto = false,
-        Attribute[] attributes = null)
+    FunctionDeclaration parseFunctionDeclaration(Type type, Attribute[] attributes, bool isAuto = false)
     {
         mixin(traceEnterAndExit!(__FUNCTION__));
         auto startIndex = index;
@@ -3423,7 +3422,7 @@ class Parser
                     return null;
             ownArray(node.storageClasses, storageClasses);
 
-            foreach (a; node.attributes)
+            foreach (a; attributes)
             {
                 if (a.attribute == tok!"auto")
                     node.hasAuto = true;

@@ -99,7 +99,7 @@ public alias IdType = TokenIdType!(operators, dynamicTokens, keywords);
  * assert (str(c) == "case");
  * ---
  */
-public alias str = tokenStringRepresentation!(IdType, operators, dynamicTokens, keywords);
+public auto str(ubyte token) { return tokenStringRepresentation!(IdType, operators, dynamicTokens, keywords)(token); }
 
 /**
  * Template used to refer to D token types.
