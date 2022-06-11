@@ -8,11 +8,8 @@ import std.range;
 import std.experimental.lexer;
 import std.traits;
 import core.cpuid : sse42;
-version (D_InlineAsm_X86_64)
-{
-    version (Windows) {}
-    else version = iasm64NotWindows;
-}
+
+public import dparse.trivia;
 
 /// Operators
 private enum operators = [
@@ -117,20 +114,64 @@ public template tok(string token)
     alias tok = TokenId!(IdType, operators, dynamicTokens, keywords, token);
 }
 
-private enum extraFields = q{
-    string comment;
-    string trailingComment;
+mixin template TokenTriviaFields()
+{
+    /**
+     * Whitespace and comment tokens attached to this token.
+     *
+     * All trivia tokens must have the text property set to the text with
+     * which they identify with. This means you can map all trivia tokens to
+     * their .text property and join them together to get the source code back
+     * without any loss of information.
+     *
+     * Trivia is only included when calling getTokensForParser. When iterating
+     * over DLexer all tokens will be in their raw form and none will be
+     * converted to trivia.
+     *
+     * Note: in the future you might need to explicitly pass
+     * WhitespaceBehavior.include (or keep the default) as getTokensForParser
+     * currently overrides it to include.
+     *
+     * Contains: `comment`, `whitespace`, `specialTokenSequence`
+     */
+    immutable(typeof(this))[] leadingTrivia;
+    /// ditto
+    immutable(typeof(this))[] trailingTrivia;
 
-    int opCmp(size_t i) const pure nothrow @safe {
+    string memoizedLeadingComment = null;
+    string memoizedTrailingComment = null;
+
+    /// Legacy property to get documentation comments, with comment border
+    /// stripped off, which is attached to this token.
+    string comment() const pure nothrow @safe @property {
+        import dparse.trivia : extractLeadingDdoc;
+        if (memoizedLeadingComment !is null)
+            return memoizedLeadingComment;
+        return (cast()memoizedLeadingComment) = this.extractLeadingDdoc;
+    }
+
+    /// ditto
+    string trailingComment() const pure nothrow @safe @property {
+        import dparse.trivia : extractTrailingDdoc;
+        if (memoizedTrailingComment !is null)
+            return memoizedTrailingComment;
+        return (cast()memoizedTrailingComment) = this.extractTrailingDdoc;
+    }
+
+    int opCmp(size_t i) const pure nothrow @safe @nogc {
         if (index < i) return -1;
         if (index > i) return 1;
         return 0;
     }
 
-    int opCmp(ref const typeof(this) other) const pure nothrow @safe {
+    int opCmp(ref const typeof(this) other) const pure nothrow @safe @nogc {
         return opCmp(other.index);
     }
-};
+}
+
+// mixin in from dparse.lexer to make error messages more managable size as the
+// entire string is dumped when there is a type mismatch.
+private enum extraFields = "import dparse.lexer:TokenTriviaFields; mixin TokenTriviaFields;";
 
 /// The token type in the D lexer
 public alias Token = std.experimental.lexer.TokenStructure!(IdType, extraFields);
@@ -144,20 +185,28 @@ public enum WhitespaceBehavior : ubyte
     skip = 0b0000_0001,
 }
 
+private enum stringBehaviorNotWorking = "Automatic string parsing is not "
+    ~ "supported and was previously not working. To unescape strings use the "
+    ~ "`dparse.strings : unescapeString` function on the token texts instead.";
+
 /**
  * Configure string lexing behavior
  */
-public enum StringBehavior : ubyte
+// was enum, but struct now for deprecations and support with old compilers
+public struct StringBehavior
 {
     /// Do not include quote characters, process escape sequences
-    compiler = 0b0000_0000,
-    /// Opening quotes, closing quotes, and string suffixes are included in the
-    /// string token
-    includeQuoteChars = 0b0000_0001,
+    deprecated(stringBehaviorNotWorking) static immutable StringBehavior compiler = StringBehavior(0b0000_0000);
+    /// Opening quotes, closing quotes, and string suffixes are included in
+    /// the string token
+    deprecated(stringBehaviorNotWorking) static immutable StringBehavior includeQuoteChars = StringBehavior(0b0000_0001);
     /// String escape sequences are not replaced
-    notEscaped = 0b0000_0010,
+    deprecated(stringBehaviorNotWorking) static immutable StringBehavior notEscaped = StringBehavior(0b0000_0010);
     /// Not modified at all. Useful for formatters or highlighters
-    source = includeQuoteChars | notEscaped
+    static immutable StringBehavior source = StringBehavior(0b0000_0011);
+
+    ubyte behavior;
+    alias behavior this;
 }
 
 public enum CommentBehavior : bool
@@ -408,97 +457,61 @@ public bool isLiteral(IdType type) pure nothrow @safe @nogc
 }
 
 /**
- * Returns: an array of tokens lexed from the given source code to the output range. All
- * whitespace tokens are skipped and comments are attached to the token nearest
- * to them.
+ * Returns: an array of tokens lexed from the given source code to the output
+ * range. All whitespace, comment and specialTokenSequence tokens (trivia) are
+ * attached to the token nearest to them.
+ *
+ * Trivia is put on the last token as `trailingTrivia` if it is on the same
+ * line as the trivia, otherwise it will be attached to the next token in the
+ * `leadingTrivia` until there is the EOF, where it will be attached as
+ * `trailingTrivia` again.
  */
 const(Token)[] getTokensForParser(R)(R sourceCode, LexerConfig config, StringCache* cache)
 if (is(Unqual!(ElementEncodingType!R) : ubyte) && isDynamicArray!R)
 {
-    enum CommentType : ubyte
-    {
-        notDoc,
-        line,
-        block
-    }
-
-    static CommentType commentType(string comment) pure nothrow @safe
-    {
-        if (comment.length < 3)
-            return CommentType.notDoc;
-        if (comment[0 ..3] == "///")
-            return CommentType.line;
-        if (comment[0 ..3] == "/++" || comment[0 ..3] == "/**")
-            return CommentType.block;
-        return CommentType.notDoc;
-    }
-
-    config.whitespaceBehavior = WhitespaceBehavior.skip;
+    config.whitespaceBehavior = WhitespaceBehavior.include;
     config.commentBehavior = CommentBehavior.noIntern;
 
-    auto leadingCommentAppender = appender!(char[])();
-    leadingCommentAppender.reserve(1024);
-    auto trailingCommentAppender = appender!(char[])();
-    trailingCommentAppender.reserve(1024);
-    bool hadDdoc;
-    string empty = cache.intern("");
+    auto leadingTriviaAppender = appender!(Token[])();
+    leadingTriviaAppender.reserve(128);
+    auto trailingTriviaAppender = appender!(Token[])();
+    trailingTriviaAppender.reserve(128);
+
     auto output = appender!(typeof(return))();
     auto lexer = DLexer(sourceCode, config, cache);
-    size_t tokenCount;
     loop: while (!lexer.empty) switch (lexer.front.type)
     {
     case tok!"specialTokenSequence":
     case tok!"whitespace":
+    case tok!"comment":
+        if (!output.data.empty && lexer.front.line == output.data[$ - 1].line)
+            trailingTriviaAppender.put(lexer.front);
+        else
+            leadingTriviaAppender.put(lexer.front);
         lexer.popFront();
         break;
-    case tok!"comment":
-        final switch (commentType(lexer.front.text))
-        {
-        case CommentType.block:
-        case CommentType.line:
-            if (tokenCount > 0 && lexer.front.line == output.data[tokenCount - 1].line)
-            {
-                if (!trailingCommentAppender.data.empty)
-                    trailingCommentAppender.put('\n');
-                unDecorateComment(lexer.front.text, trailingCommentAppender);
-                hadDdoc = true;
-            }
-            else
-            {
-                if (!leadingCommentAppender.data.empty)
-                    leadingCommentAppender.put('\n');
-                unDecorateComment(lexer.front.text, leadingCommentAppender);
-                hadDdoc = true;
-            }
-            lexer.popFront();
-            break;
-        case CommentType.notDoc:
-            lexer.popFront();
-            break;
-        }
-        break;
     case tok!"__EOF__":
-        if (!trailingCommentAppender.data.empty)
-            (cast() output.data[$ - 1].trailingComment) = cache.intern(cast(string) trailingCommentAppender.data);
         break loop;
     default:
         Token t = lexer.front;
         lexer.popFront();
-        tokenCount++;
-        if (!output.data.empty && !trailingCommentAppender.data.empty)
-        {
-            (cast() output.data[$ - 1].trailingComment) =
-                cache.intern(cast(string) trailingCommentAppender.data);
-            hadDdoc = false;
-        }
-        t.comment = leadingCommentAppender.data.length > 0
-            ? cache.intern(cast(string) leadingCommentAppender.data) : (hadDdoc ? empty : null);
-        leadingCommentAppender.clear();
-        trailingCommentAppender.clear();
-        hadDdoc = false;
+
+        if (!output.data.empty && !trailingTriviaAppender.data.empty)
+            (cast() output.data[$ - 1].trailingTrivia) = trailingTriviaAppender.data.idup;
+        t.leadingTrivia = leadingTriviaAppender.data.idup;
+        leadingTriviaAppender.clear();
+        trailingTriviaAppender.clear();
+
         output.put(t);
         break;
     }
+
+    if (!output.data.empty)
+    {
+        trailingTriviaAppender.put(leadingTriviaAppender.data);
+        (cast() output.data[$ - 1].trailingTrivia) = trailingTriviaAppender.data.idup;
+    }
+
     return output.data;
 }
 
@@ -528,7 +541,10 @@ public struct DLexer
         this.haveSSE42 = haveSSE42;
         auto r = (range.length >= 3 && range[0] == 0xef && range[1] == 0xbb && range[2] == 0xbf)
             ? range[3 .. $] : range;
-        this.range = LexerRange(cast(const(ubyte)[]) r);
+        static if (is(ElementEncodingType!R == immutable))
+            this.range = LexerRange(cast(const(ubyte)[]) r);
+        else
+            this.range = LexerRange(cast(const(ubyte)[]) r.idup);
         this.config = config;
         this.cache = cache;
         popFront();
@@ -541,6 +557,31 @@ public struct DLexer
             _popFront();
         while (config.whitespaceBehavior == WhitespaceBehavior.skip
             && _front.type == tok!"whitespace");
+    }
+
+    /**
+     * Lexer error/warning message.
+     */
+    static struct Message
+    {
+        /// 1-based line number
+        size_t line;
+        /// 1-based byte offset
+        size_t column;
+        /// Text of the message
+        string message;
+        /// `true` for an error, `false` for a warning
+        bool isError;
+    }
+
+    /**
+     * Returns: An array of all of the warnings and errors generated so far
+     *     during lexing. It may make sense to only check this when `empty`
+     *     returns `true`.
+     */
+    const(Message[]) messages() const @property
+    {
+        return _messages;
     }
 
 private pure nothrow @safe:
@@ -610,7 +651,7 @@ private pure nothrow @safe:
         mixin (tokenStart);
         loop: do
         {
-            version (iasm64NotWindows)
+            version (X86_64)
             {
                 if (haveSSE42 && range.index + 16 < range.bytes.length)
                 {
@@ -711,7 +752,7 @@ private pure nothrow @safe:
             case 'A': .. case 'F':
             case '0': .. case '9':
             case '_':
-                version (iasm64NotWindows)
+                version (X86_64)
                 {
                     if (haveSSE42 && range.index + 16 < range.bytes.length)
                     {
@@ -798,7 +839,7 @@ private pure nothrow @safe:
             case '0':
             case '1':
             case '_':
-                version (iasm64NotWindows)
+                version (X86_64)
                 {
                     if (haveSSE42 && range.index + 16 < range.bytes.length)
                     {
@@ -849,7 +890,7 @@ private pure nothrow @safe:
             {
             case '0': .. case '9':
             case '_':
-                version (iasm64NotWindows)
+                version (X86_64)
                 {
                     if (haveSSE42 && range.index + 16 < range.bytes.length)
                     {
@@ -1066,7 +1107,7 @@ private pure nothrow @safe:
         range.popFrontN(2);
         while (range.index < range.bytes.length)
         {
-            version (iasm64NotWindows)
+            version (X86_64)
             {
                 if (haveSSE42 && range.index + 16 < range.bytes.length)
                     skip!(false, '\r', '\n', '/', '*', 0xe2)(range.bytes.ptr + range.index,
@@ -1097,7 +1138,7 @@ private pure nothrow @safe:
         range.popFrontN(2);
         while (range.index < range.bytes.length)
         {
-            version (iasm64NotWindows)
+            version (X86_64)
             {
                 if (haveSSE42 && range.index + 16 < range.bytes.length)
                 {
@@ -1124,7 +1165,7 @@ private pure nothrow @safe:
         int depth = 1;
         while (depth > 0 && !(range.index >= range.bytes.length))
         {
-            version (iasm64NotWindows)
+            version (X86_64)
             {
                 if (haveSSE42 && range.index + 16 < range.bytes.length)
                 {
@@ -1171,7 +1212,7 @@ private pure nothrow @safe:
                 token = Token(tok!"");
                 return;
             }
-            version (iasm64NotWindows)
+            version (X86_64)
             {
                 if (haveSSE42 && range.index + 16 < range.bytes.length)
                 {
@@ -1186,7 +1227,11 @@ private pure nothrow @safe:
             }
             else if (range.bytes[range.index] == '\\')
             {
-                lexEscapeSequence();
+                if (!lexEscapeSequence())
+                {
+                    token = Token.init;
+                    return;
+                }
             }
             else
                 popFrontWhitespaceAware();
@@ -1213,7 +1258,7 @@ private pure nothrow @safe:
                     token = Token(tok!"");
                     return;
                 }
-                version (iasm64NotWindows)
+                version (X86_64)
                 {
                     if (haveSSE42 && range.index + 16 < range.bytes.length)
                     {
@@ -1487,6 +1532,22 @@ private pure nothrow @safe:
             index);
     }
 
+    bool lexNamedEntity()
+    in { assert (range.bytes[range.index] == '&'); }
+    do
+    {
+        Token t;
+        range.popFront();
+        lexIdentifier(t, true);
+        if (t.type != tok!"identifier" || range.empty || range.bytes[range.index] != ';')
+        {
+            error("Error: invalid named character entity");
+            return false;
+        }
+        range.popFront();
+        return true;
+    }
+
     bool lexEscapeSequence()
     {
         range.popFront();
@@ -1497,6 +1558,7 @@ private pure nothrow @safe:
         }
         switch (range.bytes[range.index])
         {
+        case '&': return lexNamedEntity();
         case '\'':
         case '"':
         case '?':
@@ -1590,12 +1652,13 @@ private pure nothrow @safe:
             }
             break;
         default:
+            error("Invalid escape sequence");
             while (true)
             {
                 if (range.index >= range.bytes.length)
                 {
                     error("Error: non-terminated character escape sequence.");
-                    return false;
+                    break;
                 }
                 if (range.bytes[range.index] == ';')
                 {
@@ -1607,6 +1670,7 @@ private pure nothrow @safe:
                     range.popFront();
                 }
             }
+            return false;
         }
         return true;
     }
@@ -1647,17 +1711,20 @@ private pure nothrow @safe:
         }
     }
 
-    void lexIdentifier(ref Token token) @trusted
+    void lexIdentifier(ref Token token, const bool silent = false) @trusted
     {
         mixin (tokenStart);
+
         if (isSeparating(0))
         {
+            if (silent) return;
+
             error("Invalid identifier");
             range.popFront();
         }
         while (true)
         {
-            version (iasm64NotWindows)
+            version (X86_64)
             {
                 if (haveSSE42 && range.index + 16 < range.bytes.length)
                 {
@@ -1783,24 +1850,16 @@ private pure nothrow @safe:
 
     void error(string message)
     {
-        messages ~= Message(range.line, range.column, message, true);
+        _messages ~= Message(range.line, range.column, message, true);
     }
 
     void warning(string message)
     {
-        messages ~= Message(range.line, range.column, message, false);
-        assert (messages.length > 0);
+        _messages ~= Message(range.line, range.column, message, false);
+        assert (_messages.length > 0);
     }
 
-    static struct Message
-    {
-        size_t line;
-        size_t column;
-        string message;
-        bool isError;
-    }
-
-    Message[] messages;
+    Message[] _messages;
     StringCache* cache;
     LexerConfig config;
     bool haveSSE42;
@@ -1840,430 +1899,6 @@ if (is(Unqual!(ElementEncodingType!R) : ubyte) && isDynamicArray!R)
 }
 
 /**
- * Removes "decoration" such as leading whitespace, leading + and * characters,
- * and places the result into the given output range
- */
-public void unDecorateComment(T)(string comment, auto ref T outputRange)
-if (isOutputRange!(T, string))
-in
-{
-    assert (comment.length >= 3);
-}
-do
-{
-    import std.string : lineSplitter, stripRight;
-
-    string leadingChars;
-    size_t i = 3;
-    size_t j;
-    bool hasOutput = false;
-    bool lastWasBlank = false;
-    switch (comment[0 .. 3])
-    {
-    case "///":
-        j = comment.length;
-
-        foreach (line; lineSplitter(comment))
-        {
-            auto l = line[3 .. $];
-            if (leadingChars.empty)
-            {
-                size_t k = 0;
-                while (k < l.length && (l[k] == ' ' || l[k] == '\t')) k++;
-                leadingChars = l[0 .. k];
-            }
-            immutable string stripped = l.stripRight();
-            if (hasOutput)
-                outputRange.put('\n');
-            else
-                hasOutput = true;
-            if (stripped.length >= leadingChars.length && stripped.startsWith(leadingChars))
-                outputRange.put(stripped[leadingChars.length .. $]);
-            else
-                outputRange.put(stripped);
-        }
-        break;
-    case "/++":
-    case "/**":
-        alias CL = MultiLineCommentHelper!(ElementEncodingType!(typeof(comment)));
-        CL cl = CL(comment);
-        cl.process(outputRange);
-        break;
-    default:
-        outputRange.put(comment);
-    }
-}
-
-///
-unittest
-{
-    import std.array:array, appender;
-    import std.stdio:stderr;
-    stderr.writeln("Running unittest for unDecorateComment...");
-
-    string[] inputs = [
-        "/***************\n*******************/",
-        "/***************\n *\n ******************/",
-        "/**\n*/",
-        "/** */",
-        "/***/",
-        "/******/",
-        "/** abcde1 */",
-        "/// abcde2\n/// abcde2",
-        "/**\n * stuff1\n */",
-        "/**\n *\n * stuff2\n */",
-        "/**\n *\n * stuff3\n *\n */",
-        "/**\n *\n * stuff4\n *\n*/",
-        "/**\n *  abcde3\n *    abcde3 \n */",
-        "/**\n * abcde4\n *\n * abcde4\n */",
-        "/**abcde5\n*abcde5\n*/",
-        "/** abcde6\n * abcde6\n*/",
-        "/**\n1\n\n\n\n*/",
-        "/**\r\n1\r\n\r\n\r\n\r\n*/",
-        "/**\na1\n\na2\n\n*/",
-        "/**b1\n*b2\n*b3*/",
-        "/**c1\n    *c2\n    *c3*/",
-        "/**d1\n    *d2\n    *d3\n*/",
-    ];
-    string[] outputs = [
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "abcde1",
-        "abcde2\nabcde2",
-        "stuff1",
-        "stuff2",
-        "stuff3",
-        "stuff4",
-        "abcde3\n  abcde3",
-        "abcde4\n\nabcde4",
-        "abcde5\nabcde5",
-        "abcde6\nabcde6",
-        "1",
-        "1",
-        "a1\n\na2",
-        "b1\nb2\nb3",
-        "c1\nc2\nc3",
-        "d1\nd2\nd3",
-    ];
-
-    // tests where * and + are not interchangeable
-    string[2][] np =
-    [
-        ["/**\n * d1\n d2\n */", "* d1\nd2"],
-        ["/**\n + d1\n d2\n */", "+ d1\nd2"],
-        ["/**d1\n\n\n*d2\n*/",  "d1\n\n*d2"],
-    ];
-
-    assert(inputs.length == outputs.length);
-    foreach (pair; zip(inputs, outputs))
-    {
-        foreach (b; [true, false])
-        {
-            auto app = appender!string();
-            unDecorateComment(b ? pair[0] : pair[0].replace("*", "+"), app);
-            assert(pair[1] == app.data, "[[" ~ pair[0] ~ "]] => [[" ~ app.data ~ "]]");
-        }
-    }
-    foreach (pair; np)
-    {
-        auto app = appender!string();
-        unDecorateComment(pair[0], app);
-        assert(pair[1] == app.data, "[[" ~ pair[0] ~ "]] => [[" ~ app.data ~ "]]");
-    }
-    stderr.writeln("Unittest for unDecorateComment passed.");
-}
-
-/** Gives a line per line view on DDOC comments of type `/++` and `/**` which
- * makes easier to remove the decoration and in an almost 100% nogc way. */
-private struct MultiLineCommentHelper(CharType : const(char))
-{
-    // this struct is more used as a 'function with nested functions' would.
-    this() @disable;
-    this(this) @disable;
-    auto opAssign(T)(T t) @disable;
-
-private:
-
-    char[][] lines;
-    // either lines.length or lines.length-1, depending on if last line only closes
-    size_t lastLineInBlockPlusOne;
-    // either '*' or '+'
-    const(char) commentChar;
-    // either 0 or 1, depending on if first line only opens
-    ubyte firstLineInBlock;
-
-    import std.ascii : isWhite;
-
-    void stripIndent() @safe @nogc pure nothrow
-    {
-        if (lines.length < 2)
-            return;
-        size_t count;
-        foreach (const j; 0 .. lines[1].length)
-            if (!(lines[1][j]).isWhite)
-        {
-            count = j;
-            break;
-        }
-        if (count < 2)
-            return;
-        foreach (ref line; lines[1 .. $])
-        {
-            foreach (const j; 0 .. line.length)
-            {
-                if (!(line[j]).isWhite)
-                    break;
-                if (j == count - 1)
-                {
-                    line = line[j .. $];
-                    break;
-                }
-            }
-        }
-    }
-
-    void processFirstLine() @safe @nogc pure nothrow
-    {
-        assert(lines.length);
-        if (lines[0].length > 3)
-        {
-            foreach (const i; 1..lines[0].length)
-            {
-                if (lines[0][i] == commentChar)
-                {
-                    if (i < lines[0].length - 2)
-                        continue;
-                    if (i == lines[0].length - 2 && lines[0][i+1] == '/')
-                    {
-                        lines[0][] = ' ';
-                        break;
-                    }
-                    if (i == lines[0].length - 1)
-                    {
-                        lines[0][] = ' ';
-                        break;
-                    }
-                }
-                else
-                {
-                    lines[0][0..i] = ' ';
-                    break;
-                }
-            }
-        }
-        lines[0][0..3] = "   ";
-        if (lines.length == 1 &&
-            lines[0][$-2] == commentChar && lines[0][$-1] == '/')
-        {
-            lines[0][$-2..$] = "  ";
-        }
-        foreach (const i; 0..lines[0].length)
-            if (!(lines[0][i].isWhite))
-                return;
-        firstLineInBlock = 1;
-    }
-
-    void processLastLine() @safe @nogc pure nothrow
-    {
-        lastLineInBlockPlusOne = lines.length;
-        if (lines.length == 1)
-            return;
-        size_t closeStartIndex = size_t.max;
-        foreach (const i; 0..lines[$-1].length)
-        {
-            if (lines[$-1][i] == commentChar)
-            {
-                if (closeStartIndex == size_t.max)
-                    closeStartIndex = i;
-                if (i == lines[$-1].length - 2)
-                {
-                    // see the FIXME note in unDecorate()
-                    lastLineInBlockPlusOne = closeStartIndex == 0 ? lines.length-1 : lines.length;
-
-                    lines[$-1][closeStartIndex..$] = ' ';
-                    break;
-                }
-            }
-            else
-            {
-                closeStartIndex = size_t.max;
-                lastLineInBlockPlusOne = lines.length;
-            }
-        }
-    }
-
-    void unDecorate() @safe @nogc pure nothrow
-    {
-        if (lines.length == 1 || lines.length == 2 && lines[$-1].length == 0)
-            return;
-        bool allDecorated;
-        static immutable char[2][2] pattern = [[' ', '*'],[' ', '+']];
-        const ubyte patternIndex = commentChar == '+';
-        // first line is never decorated
-        const size_t lo = 1;
-        // although very uncommon, the last line can be decorated e.g in `* lastline */`:
-        // the first '*' is a deco if all prev lines are also decorated.
-        // FIXME: `hi` should be set to `lastLineInBlockPlusOne`...
-        const size_t hi = (lines[$-1].length > 1 &&
-            (lines[$-1][0] == commentChar || lines[$-1][0..2] == pattern[patternIndex]))
-            ?  lines.length : lines.length-1;
-        // deco with a leading white
-        foreach (const i; lo .. hi)
-        {
-            if (lines[i].length < 2)
-                break;
-            else if (lines[i][0..2] != pattern[patternIndex])
-                break;
-            else if (i == hi-1)
-                allDecorated = true;
-        }
-        // deco w/o leading white
-        if (!allDecorated)
-            foreach (const i; lo .. hi)
-        {
-            if (lines[i].length == 0)
-                break;
-            if (lines[i][0] != commentChar)
-                break;
-            else if (i == hi-1)
-                allDecorated = true;
-        }
-        if (!allDecorated)
-            return;
-
-        const size_t indexToChange = (lines[lo][0] == commentChar) ? 0 : 1;
-        foreach (ref line; lines[lo .. hi])
-            line[indexToChange] = ' ';
-    }
-
-    void stripLeft() @safe @nogc pure nothrow
-    {
-        foreach (const i; 0 .. lines[0].length)
-            if (!(lines[0][i]).isWhite)
-        {
-            lines[0] = lines[0][i..$];
-            break;
-        }
-        if (lines.length == 1)
-            return;
-        while (true)
-        {
-            bool processColumn;
-            foreach (ref line; lines[1 .. lastLineInBlockPlusOne])
-            {
-                if (line.length == 0)
-                    continue;
-                if (!(line[0]).isWhite)
-                    return;
-                processColumn = true;
-            }
-            if (!processColumn)
-                return;
-            foreach (ref line; lines[1 .. lastLineInBlockPlusOne])
-            {
-                if (line.length == 0)
-                    continue;
-                line = line[1..$];
-            }
-        }
-    }
-
-    void stripRight() @safe @nogc pure nothrow
-    {
-        foreach (ref line; lines[0 .. lines.length])
-        {
-            if (line.length == 0)
-                continue;
-            if ((line[$-1]).isWhite)
-            {
-                size_t firstWhite = line.length;
-                while (firstWhite > 0 && (line[firstWhite-1]).isWhite)
-                    firstWhite--;
-                line = line[0..firstWhite];
-            }
-        }
-    }
-
-    void run() @safe @nogc pure nothrow
-    {
-        stripIndent();
-        processFirstLine();
-        processLastLine();
-        unDecorate();
-        stripLeft();
-        stripRight();
-    }
-
-public:
-
-    this(CharType[] text) @safe pure nothrow
-    {
-        commentChar = text[1];
-        size_t startIndex, i;
-        Appender!(char[][]) linesApp;
-        linesApp.reserve(512);
-
-        void storeLine(size_t endIndexPlusOne)
-        {
-            static if (isMutable!CharType)
-                linesApp ~= text[startIndex..endIndexPlusOne];
-            else
-                linesApp ~= text[startIndex..endIndexPlusOne].dup;
-        }
-
-        while (true)
-        {
-            if (i == text.length - 1)
-            {
-                storeLine(text.length);
-                break;
-            }
-            if (text[i] == '\n')
-            {
-                storeLine(i);
-                startIndex = i + 1;
-            }
-            else if (text[i .. i+2] == "\r\n")
-            {
-                storeLine(i);
-                i++;
-                startIndex = i + 1;
-            }
-            i++;
-        }
-        lines = linesApp.data;
-    }
-
-    void process(T)(ref T outbuffer)
-    {
-        run();
-        outbuffer.reserve(lines.length * 90);
-        bool prevWritten, empties;
-        foreach (ref line; lines[firstLineInBlock .. lines.length])
-        {
-            if (line.length != 0)
-            {
-                // close preceeding line
-                if (prevWritten)
-                    outbuffer ~= "\n";
-                // insert new empty line
-                if (prevWritten && empties)
-                    outbuffer ~= "\n";
-
-                outbuffer ~= line;
-                prevWritten = true;
-                empties = false;
-            }
-            else empties = true;
-        }
-    }
-}
-
-/**
  * Helper function used to avoid too much allocations while lexing.
  *
  * Params:
@@ -2282,7 +1917,8 @@ unittest
 {
     assert(optimalBucketCount(1) == 2);
     assert(optimalBucketCount(9000 * 32) == 16384);
-    assert(optimalBucketCount(100_000_000_000UL) == 1 << 30);
+    static if (size_t.sizeof == ulong.sizeof)
+        assert(optimalBucketCount(100_000_000_000UL) == 1 << 30);
 }
 
 /**
@@ -2557,61 +2193,92 @@ unittest
     assert (toks(`'\xXX'`).messages[0] == DLexer.Message(1,4,"Error: 2 hex digits expected.",true));
 }
 
-version (iasm64NotWindows)
+version (X86_64)
 {
-    /**
-     * Skips between 0 and 16 bytes that match (or do not match) one of the
-     * given $(B chars).
-     */
-    void skip(bool matching, chars...)(const ubyte*, ulong*, ulong*) pure nothrow
+    version (DigitalMars)
+        private enum useDMDStyle = true;
+    else version (LDC)
+        private enum useDMDStyle = (__VERSION__ < 2092); // GDC-style supported since v1.22
+    else
+        private enum useDMDStyle = false; // not supported by GDC
+
+    private ulong pcmpestri(ubyte flags, chars...)(const ubyte* bytes) pure nothrow
         @trusted @nogc if (chars.length <= 8)
     {
         enum constant = ByteCombine!chars;
         enum charsLength = chars.length;
+
+        static if (useDMDStyle)
+        {
+            asm pure nothrow @nogc
+            {
+                naked;
+            }
+            version (Windows) // `bytes` in RCX
+                asm pure nothrow @nogc { movdqu XMM1, [RCX]; }
+            else // `bytes` in RDI
+                asm pure nothrow @nogc { movdqu XMM1, [RDI]; }
+            asm pure nothrow @nogc
+            {
+                mov R10, constant;
+                movq XMM2, R10;
+                mov RAX, charsLength;
+                mov RDX, 16;
+                pcmpestri XMM2, XMM1, flags;
+                mov RAX, RCX;
+                ret;
+            }
+        }
+        else // GDC-style inline asm (GCC basically)
+        {
+            ulong result;
+            asm pure nothrow @nogc
+            {
+                `movdqu    %1, %%xmm1
+                 movq      %3, %%xmm2
+                 pcmpestri %5, %%xmm1, %%xmm2`
+                : "=c" (result)   // %0: pcmpestri result in RCX, to be stored into `result`
+                : "m" (*bytes),   // %1: address of `bytes` string
+                  "d" (16),       // %2: length of `bytes` head in XMM1, as pcmpestri input in EDX
+                  "r" (constant), // %3: max 8 `chars` to load into GP register, then XMM2
+                  "a" (charsLength), // %4: length in XMM2, as pcmpestri input in EAX
+                  "i" (flags)     // %5: `flags` immediate
+                : "xmm1", "xmm2"; // clobbered registers
+            }
+            return result;
+        }
+    }
+
+    /**
+     * Skips between 0 and 16 bytes that match (or do not match) one of the
+     * given $(B chars).
+     */
+    void skip(bool matching, chars...)(const ubyte* bytes, ulong* pindex, ulong* pcolumn) pure nothrow
+        @trusted @nogc if (chars.length <= 8)
+    {
         static if (matching)
             enum flags = 0b0001_0000;
         else
             enum flags = 0b0000_0000;
-        asm pure nothrow @nogc
-        {
-            naked;
-            movdqu XMM1, [RDX];
-            mov R10, constant;
-            movq XMM2, R10;
-            mov RAX, charsLength;
-            mov RDX, 16;
-            pcmpestri XMM2, XMM1, flags;
-            add [RSI], RCX;
-            add [RDI], RCX;
-            ret;
-        }
+
+        const r = pcmpestri!(flags, chars)(bytes);
+        *pindex += r;
+        *pcolumn += r;
     }
 
     /**
      * Returns: the number of bytes starting at the given location that match
      *     (or do not match if $(B invert) is true) the byte ranges in $(B chars).
      */
-    ulong rangeMatch(bool invert, chars...)(const ubyte*) pure nothrow @trusted @nogc
+    ulong rangeMatch(bool invert, chars...)(const ubyte* bytes) pure nothrow @trusted @nogc
     {
-        static assert (chars.length % 2 == 0);
-        enum constant = ByteCombine!chars;
+        static assert(chars.length % 2 == 0);
         static if (invert)
             enum rangeMatchFlags = 0b0000_0100;
         else
             enum rangeMatchFlags = 0b0001_0100;
-        enum charsLength = chars.length;
-        asm pure nothrow @nogc
-        {
-            naked;
-            movdqu XMM1, [RDI];
-            mov R10, constant;
-            movq XMM2, R10;
-            mov RAX, charsLength;
-            mov RDX, 16;
-            pcmpestri XMM2, XMM1, rangeMatchFlags;
-            mov RAX, RCX;
-            ret;
-        }
+
+        return pcmpestri!(rangeMatchFlags, chars)(bytes);
     }
 
     template ByteCombine(c...)
@@ -2637,4 +2304,148 @@ unittest
 
     assertNotThrown!RangeError(getTokensForParser(src1, cf, &ca));
     assertNotThrown!RangeError(getTokensForParser(src2, cf, &ca));
+}
+
+unittest
+{
+    static immutable src = `"\eeee"`;
+
+    LexerConfig cf;
+    StringCache ca = StringCache(16);
+
+    auto l = DLexer(src, cf, &ca);
+    assert(l.front().type == tok!"");
+    assert(!l.messages.empty);
+}
+
+unittest
+{
+    alias Msg = DLexer.Message;
+    LexerConfig cf;
+    StringCache ca = StringCache(16);
+
+    {
+        auto l = DLexer(`"\&copy;"`, cf, &ca);
+        assert(l.front().type == tok!"stringLiteral");
+        assert(l.messages == []);
+    }
+    {
+        auto l = DLexer(`"\&trade;\&urcorn;"`, cf, &ca);
+        assert(l.front().type == tok!"stringLiteral");
+        assert(l.messages == []);
+    }
+    {
+        auto l = DLexer(`"\&trade"`, cf, &ca);
+        assert(l.front().type == tok!"");
+        assert(l.messages == [ Msg(1, 9, "Error: invalid named character entity", true) ]);
+    }
+    {
+        auto l = DLexer(`"\&trade;\&urcorn"`, cf, &ca);
+        assert(l.front().type == tok!"");
+        assert(l.messages == [ Msg(1, 18, "Error: invalid named character entity", true) ]);
+    }
+    {
+        auto l = DLexer(`"\&"`, cf, &ca);
+        assert(l.front().type == tok!"");
+        assert(l.messages == [ Msg(1, 4, "Error: invalid named character entity", true) ]);
+    }
+    {
+        auto l = DLexer(`"\&0"`, cf, &ca);
+        assert(l.front().type == tok!"");
+        assert(l.messages == [ Msg(1, 5, "Error: invalid named character entity", true) ]);
+    }
+    {
+        auto l = DLexer(`"\&copy`, cf, &ca);
+        assert(l.front().type == tok!"");
+        assert(l.messages == [ Msg(1, 8, "Error: invalid named character entity", true) ]);
+    }
+    {
+        auto l = DLexer(`"\&copy;`, cf, &ca);
+        assert(l.front().type == tok!"");
+        assert(l.messages == [ Msg(1, 9, "Error: unterminated string literal", true) ]);
+    }
+}
+
+// legacy code using compatibility comment and trailingComment
+unittest
+{
+    import std.conv : to;
+    import std.exception : enforce;
+
+    static immutable src = `/// this is a module.
+// mixed
+/// it can do stuff
+module foo.bar;
+
+// hello
+
+/**
+ * some doc
+ * hello
+ */
+int x; /// very nice
+
+// TODO: do stuff
+void main() {
+    #line 40
+    /// could be better
+    writeln(":)");
+}
+
+/// end of file`;
+
+    LexerConfig cf;
+    StringCache ca = StringCache(16);
+
+    const tokens = getTokensForParser(src, cf, &ca);
+
+    void assertEquals(T)(T a, T b, string what, string file = __FILE__, size_t line = __LINE__)
+    {
+        enforce(a == b, "Failed " ~ what ~ " '" ~ a.to!string ~ "' == '" ~ b.to!string ~ "'", file, line);
+    }
+
+    void test(size_t index, IdType type, string comment, string trailingComment,
+            string file = __FILE__, size_t line = __LINE__)
+    {
+        assertEquals(tokens[index].type, type, "type", file, line);
+        assertEquals(tokens[index].comment, comment, "comment", file, line);
+        assertEquals(tokens[index].trailingComment, trailingComment, "trailingComment", file, line);
+    }
+
+    test(0, tok!"module", "this is a module.\nit can do stuff", "");
+    test(1, tok!"identifier", "", "");
+    test(2, tok!".", "", "");
+    test(3, tok!"identifier", "", "");
+    test(4, tok!";", "", "");
+    test(5, tok!"int", "some doc\nhello", "");
+    test(6, tok!"identifier", "", "");
+    test(7, tok!";", "", "very nice");
+    test(8, tok!"void", "", "");
+    test(9, tok!"identifier", "", "");
+    test(10, tok!"(", "", "");
+    test(11, tok!")", "", "");
+    test(12, tok!"{", "", "");
+    test(13, tok!"identifier", "could be better", "");
+    test(14, tok!"(", "", "");
+    test(15, tok!"stringLiteral", "", "");
+    test(16, tok!")", "", "");
+    test(17, tok!";", "", "");
+    test(18, tok!"}", "", "");
+}
+
+// dlang-community/D-Scanner#805
+unittest
+{
+    final class SomeExpr
+    {
+        Token tok;
+    }
+
+    auto e1 = new SomeExpr();
+    const e2 = new SomeExpr();
+    immutable e3 = new immutable SomeExpr();
+
+    immutable t1 = e1.tok;
+    immutable t2 = e2.tok;
+    immutable t3 = e3.tok;
 }

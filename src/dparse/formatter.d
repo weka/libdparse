@@ -1878,7 +1878,7 @@ class Formatter(Sink)
     void format(const InContractExpression expression)
     {
         debug(verbose) writeln("InContractExpression");
-
+        newlineIndent();
         put("in (");
         format(expression.assertArguments);
         put(")");
@@ -1904,7 +1904,6 @@ class Formatter(Sink)
         {
             if (inContractExpression) format(inContractExpression);
             if (outContractExpression) format(outContractExpression);
-            newline();
         }
     }
 
@@ -1922,6 +1921,7 @@ class Formatter(Sink)
     void format(const InStatement inStatement)
     {
         debug(verbose) writeln("InStatement");
+        newlineIndent();
         put("in");
         format(inStatement.blockStatement);
     }
@@ -2346,7 +2346,7 @@ class Formatter(Sink)
     void format(const OutContractExpression expression)
     {
         debug(verbose) writeln("OutContractExpression");
-
+        newlineIndent();
         put("out (");
         if (expression.parameter != tok!"")
             format(expression.parameter);
@@ -2363,7 +2363,7 @@ class Formatter(Sink)
         Token parameter;
         BlockStatement blockStatement;
         **/
-
+        newlineIndent();
         put("out");
         if (stmnt.parameter != tok!"")
         {
@@ -2653,6 +2653,14 @@ class Formatter(Sink)
         mixin(binary("shiftExpression"));
     }
 
+    void format(const ShortenedFunctionBody shortenedFunctionBody)
+    {
+        debug(verbose) writeln("ShortenedFunctionBody");
+        put("=> ");
+        format(shortenedFunctionBody.expression);
+        put(";");
+    }
+
     void format(const SingleImport singleImport)
     {
         debug(verbose) writeln("SingleImport");
@@ -2678,7 +2686,11 @@ class Formatter(Sink)
         {
             foreach (contract; functionContracts)
                 format(contract);
-            put("do");
+            if (specifiedFunctionBody.hasDo)
+            {
+                newlineIndent();
+                put("do");
+            }
             if (blockStatement)
                 format(blockStatement);
         }
@@ -2737,7 +2749,6 @@ class Formatter(Sink)
                 "withStatement",
                 "synchronizedStatement",
                 "tryStatement",
-                "throwStatement",
                 "scopeGuardStatement",
                 "asmStatement",
                 "conditionalStatement",
@@ -3293,14 +3304,13 @@ class Formatter(Sink)
         }
     }
 
-    void format(const ThrowStatement throwStatement)
+    void format(const ThrowExpression throwExpression)
     {
-        debug(verbose) writeln("ThrowStatement");
+        debug(verbose) writeln("ThrowExpression");
 
         put("throw ");
-        assert(throwStatement.expression);
-        format(throwStatement.expression);
-        put(";");
+        assert(throwExpression.expression);
+        format(throwExpression.expression);
     }
 
     void format(const Token token)
@@ -3589,6 +3599,7 @@ class Formatter(Sink)
             if (castExpression) format(castExpression);
             if (functionCallExpression) format(functionCallExpression);
             if (assertExpression) format(assertExpression);
+            if (throwExpression) format(throwExpression);
             if (indexExpression) format(indexExpression);
 
             if (unaryExpression) format(unaryExpression);
@@ -4084,10 +4095,18 @@ void testFormatNode(Node)(string sourceCode, string expected = "")
         {
             stuff.accept(this);
             format(&fmt, stuff);
-            if (expected.length)
-                assert(fmt.data.canFind(expected), "\n" ~ fmt.data);
-            else
-                assert(fmt.data.canFind(sourceCode), "\n" ~ fmt.data);
+            const exp = expected.length ? expected : sourceCode;
+            const act = fmt.data();
+            if (!act.canFind(exp))
+            {
+                string msg = "Formatted code didn't contain the expected output!";
+                msg ~= "\n=============== Expected ===================\n";
+                msg ~= exp;
+                msg ~= "\n=============== Actual ===================\n";
+                msg ~= act;
+                msg ~= "\n==========================================";
+                assert(false, msg);
+            }
         }
     }
 
@@ -4144,4 +4163,101 @@ do{}
     testFormatNode!(AliasDeclaration)("alias f(T) = void(int, int, int) const pure nothrow;");
 
     testFormatNode!(AliasDeclaration)("alias MT = mixin (strEnum1, strEnum2);");
+
+    testFormatNode!(Module)("static assert(() @trusted { return bar()(3); }() == 4);",
+`static assert (() @trusted
+{ return bar()(3);
+}() == 4)`
+);
+    testFormatNode!(Module)("int foo() { return 2; }",
+`int foo()
+{
+    return 2;
+}`
+);
+
+    testFormatNode!(Module)("int foo() do { return 2; }",
+`int foo()
+do
+{
+    return 2;
+}`
+);
+
+    testFormatNode!(Module)("int foo(int i) in(i > 0) do { return 2; }",
+`int foo(int i)
+in (i > 0)
+do
+{
+    return 2;
+}`
+);
+
+    testFormatNode!(Module)("int foo(int i) in { assert(i > 0); } do { return 2; }",
+`int foo(int i)
+in
+{
+    assert (i > 0);
+}
+do
+{
+    return 2;
+}`
+);
+
+    testFormatNode!(Module)("int foo() out(j; j > 0) do { return 2; }",
+`int foo()
+out (j; j > 0)
+do
+{
+    return 2;
+}`
+);
+
+    testFormatNode!(Module)("int foo() out(j) { assert(j > 0); } do { return 2; }",
+`int foo()
+out (j)
+{
+    assert (j > 0);
+}
+do
+{
+    return 2;
+}`
+);
+
+    testFormatNode!(Module)("version(BAR) {
+        int foo(int i)
+        in(i > 0) in { assert(i > 0); }
+        out(j; j > 0) out(j) { assert(j>0); }
+        do { return 2; } int i; }
+    ",
+`version (BAR)
+{
+
+    int foo(int i)
+    in (i > 0)
+    in
+    {
+        assert (i > 0);
+    }
+    out (j; j > 0)
+    out (j)
+    {
+        assert (j > 0);
+    }
+    do
+    {
+        return 2;
+    }
+
+    int i;
+}`
+);
+    testFormatNode!(Declaration)(q{int i = throw new Ex();});
+    testFormatNode!(FunctionDeclaration)(q{void someFunction()
+{
+    foo(a, throw b, c);
+    return throw new Exception("", "");
+}});
 }
