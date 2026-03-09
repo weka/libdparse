@@ -16,10 +16,10 @@
 module dparse.ast;
 
 import dparse.lexer;
-import std.traits;
 import std.algorithm;
 import std.array;
 import std.string;
+import std.traits;
 
 private immutable uint[TypeInfo] typeMap;
 
@@ -73,6 +73,8 @@ shared static this()
     typeMap[typeid(TypeofExpression)] = 46;
     typeMap[typeid(UnaryExpression)] = 47;
     typeMap[typeid(XorExpression)] = 48;
+    typeMap[typeid(InterpolatedStringExpression)] = 49;
+    typeMap[typeid(InterpolatedStringText)] = 50;
 }
 
 /// Describes which syntax was used in a list of declarations in the containing AST node
@@ -92,11 +94,32 @@ enum DeclarationListStyle : ubyte
  */
 abstract class ASTVisitor
 {
-
-    /** */
+    deprecated("Don't use or override visit(ExpressionNode). For usage: dynamicDispatch(ExpressionNode) is equivalent; "
+        ~ "for overriding: you should probably override more specific cases. If you need to override to inject some "
+        ~ "before/after code for all cases, make sure to call `super.dynamicDispatch(n)` instead of `n.accept(this)`!")
     void visit(const ExpressionNode n)
     {
-        switch (typeMap[typeid(n)])
+        dynamicDispatch(n);
+    }
+
+    /**
+     * Looks at the runtime type of `n`, then calls the appropriate `visit`
+     * method at runtime.
+     *
+     * Rule of thumb: when the type is an abstract class, use `dynamicDispatch`,
+     * otherwise use `visit`.
+     *
+     * For templated calls:
+     * ---
+     * static if (__traits(isAbstractClass, typeof(node)))
+     *   visitor.dynamicDispatch(node);
+     * else
+     *   visitor.visit(node);
+     * ---
+     */
+    void dynamicDispatch(const ExpressionNode n)
+    {
+        switch (typeMap.get(typeid(n), 0))
         {
         case 1: visit(cast(AddExpression) n); break;
         case 2: visit(cast(AndAndExpression) n); break;
@@ -146,6 +169,18 @@ abstract class ASTVisitor
         case 46: visit(cast(TypeofExpression) n); break;
         case 47: visit(cast(UnaryExpression) n); break;
         case 48: visit(cast(XorExpression) n); break;
+        // skip 49, 50 (used for InterpolatedStringPart)
+        default: assert(false, __MODULE__ ~ " has a bug");
+        }
+    }
+
+    /// ditto
+    void dynamicDispatch(const InterpolatedStringPart n)
+    {
+        switch (typeMap.get(typeid(n), 0))
+        {
+        case 49: visit(cast(InterpolatedStringExpression) n); break;
+        case 50: visit(cast(InterpolatedStringText) n); break;
         default: assert(false, __MODULE__ ~ " has a bug");
         }
     }
@@ -195,6 +230,7 @@ abstract class ASTVisitor
     /** */ void visit(const BreakStatement breakStatement) { breakStatement.accept(this); }
     /** */ void visit(const BaseClass baseClass) { baseClass.accept(this); }
     /** */ void visit(const BaseClassList baseClassList) { baseClassList.accept(this); }
+    /** */ void visit(const BitfieldWidth bitfieldWidth) { bitfieldWidth.accept(this); }
     /** */ void visit(const CaseRangeStatement caseRangeStatement) { caseRangeStatement.accept(this); }
     /** */ void visit(const CaseStatement caseStatement) { caseStatement.accept(this); }
     /** */ void visit(const CastExpression castExpression) { castExpression.accept(this); }
@@ -253,6 +289,7 @@ abstract class ASTVisitor
     /** */ void visit(const IdentifierOrTemplateInstance identifierOrTemplateInstance) { identifierOrTemplateInstance.accept(this); }
     /** */ void visit(const IdentityExpression identityExpression) { identityExpression.accept(this); }
     /** */ void visit(const IfStatement ifStatement) { ifStatement.accept(this); }
+    /** */ void visit(const IfCondition ifCondition) { ifCondition.accept(this); }
     /** */ void visit(const ImportBind importBind) { importBind.accept(this); }
     /** */ void visit(const ImportBindings importBindings) { importBindings.accept(this); }
     /** */ void visit(const ImportDeclaration importDeclaration) { importDeclaration.accept(this); }
@@ -266,6 +303,9 @@ abstract class ASTVisitor
     /** */ void visit(const Initialize initialize) { initialize.accept(this); }
     /** */ void visit(const Initializer initializer) { initializer.accept(this); }
     /** */ void visit(const InterfaceDeclaration interfaceDeclaration) { interfaceDeclaration.accept(this); }
+    /** */ void visit(const InterpolatedString interpolatedString) { interpolatedString.accept(this); }
+    /** */ void visit(const InterpolatedStringExpression interpolatedStringExpression) { interpolatedStringExpression.accept(this); }
+    /** */ void visit(const InterpolatedStringText interpolatedStringText) { interpolatedStringText.accept(this); }
     /** */ void visit(const Invariant invariant_) { invariant_.accept(this); }
     /** */ void visit(const IsExpression isExpression) { isExpression.accept(this); }
     /** */ void visit(const KeyValuePair keyValuePair) { keyValuePair.accept(this); }
@@ -282,6 +322,10 @@ abstract class ASTVisitor
     /** */ void visit(const Module module_) { module_.accept(this); }
     /** */ void visit(const ModuleDeclaration moduleDeclaration) { moduleDeclaration.accept(this); }
     /** */ void visit(const MulExpression mulExpression) { mulExpression.accept(this); }
+    /** */ void visit(const NamedArgument argument) { argument.accept(this); }
+    /** */ void visit(const NamedArgumentList argument) { argument.accept(this); }
+    /** */ void visit(const NamedTemplateArgumentList namedTemplateArgumentList) { namedTemplateArgumentList.accept(this); }
+    /** */ void visit(const NamedTemplateArgument namedTemplateArgument) { namedTemplateArgument.accept(this); }
     /** */ void visit(const NamespaceList namespaceList) { namespaceList.accept(this); }
     /** */ void visit(const NewAnonClassExpression newAnonClassExpression) { newAnonClassExpression.accept(this); }
     /** */ void visit(const NewExpression newExpression) { newExpression.accept(this); }
@@ -381,11 +425,15 @@ template visitIfNotNull(fields ...)
     {
         static if (typeof(fields[0]).stringof[$ - 2 .. $] == "[]")
         {
-            static if (__traits(hasMember, typeof(fields[0][0]), "classinfo"))
+            static if (__traits(isAbstractClass, typeof(fields[0][0])))
+                immutable visitIfNotNull = "foreach (i; " ~ fields[0].stringof ~ ") if (i !is null) visitor.dynamicDispatch(i);\n";
+            else static if (__traits(hasMember, typeof(fields[0][0]), "classinfo"))
                 immutable visitIfNotNull = "foreach (i; " ~ fields[0].stringof ~ ") if (i !is null) visitor.visit(i);\n";
             else
                 immutable visitIfNotNull = "foreach (i; " ~ fields[0].stringof ~ ") visitor.visit(i);\n";
         }
+        else static if (__traits(isAbstractClass, typeof(fields[0])))
+            immutable visitIfNotNull = "if (" ~ fields[0].stringof ~ " !is null) visitor.dynamicDispatch(" ~ fields[0].stringof ~ ");\n";
         else static if (__traits(hasMember, typeof(fields[0]), "classinfo"))
             immutable visitIfNotNull = "if (" ~ fields[0].stringof ~ " !is null) visitor.visit(" ~ fields[0].stringof ~ ");\n";
         else static if (is(Unqual!(typeof(fields[0])) == Token))
@@ -395,45 +443,57 @@ template visitIfNotNull(fields ...)
     }
 }
 
-mixin template OpEquals(bool print = false)
+private mixin template OpEquals(extraFields...)
 {
     override bool opEquals(Object other) const
     {
-        static if (print)
-            pragma(msg, generateOpEquals!(typeof(this)));
-        mixin (generateOpEquals!(typeof(this)));
+        if (auto obj = cast(typeof(this)) other)
+        {
+            foreach (i, field; this.tupleof)
+            {
+                if (typeof(this).tupleof[i].stringof.among(
+                    "comment", "line", "column", "endLocation", "startLocation",
+                    "index", "dotLocation"
+                ))
+                    continue;
+
+                if (field != obj.tupleof[i])
+                    return false;
+            }
+            static foreach (field; extraFields)
+                if (mixin("this." ~ field ~ " != obj." ~ field))
+                    return false;
+            return true;
+        }
+        return false;
     }
 }
 
-template generateOpEquals(T)
+unittest
 {
-    template opEqualsPart(p ...)
-    {
-        import std.traits : isSomeFunction, isDynamicArray;
-        import std.algorithm : among;
+    auto lhs = new AddExpression();
+    auto rhs = new AddExpression();
+    assert(lhs == rhs);
+    lhs.line = 4;
+    assert(lhs == rhs);
+    lhs.operator = tok!"-";
+    assert(lhs != rhs);
+    rhs.operator = tok!"-";
+    assert(lhs == rhs);
+}
 
-        static if (p.length > 1)
-        {
-            enum opEqualsPart = opEqualsPart!(p[0 .. $/2]) ~ opEqualsPart!(p[$/2 .. $]);
-        }
-        else static if (p.length && !isSomeFunction!(typeof(__traits(getMember, T, p[0])))
-            && !p[0].among("comment", "line", "column", "endLocation", "startLocation", "index", "dotLocation"))
-        {
-            static if (isDynamicArray!(typeof(__traits(getMember, T, p[0]))))
-            {
-                enum opEqualsPart = "\tif (obj." ~ p[0] ~ ".length != " ~ p[0] ~ ".length) return false;\n"
-                    ~ "\tforeach (i; 0 .. " ~ p[0]  ~ ".length)\n"
-                    ~ "\t\tif (" ~ p[0] ~ "[i] != obj." ~ p[0] ~ "[i]) return false;\n";
-            }
-            else
-                enum opEqualsPart = "\tif (obj." ~ p[0] ~ " != " ~ p[0] ~ ") return false;\n";
-        }
-        else
-            enum opEqualsPart = "";
-    }
-    enum generateOpEquals = "if (auto obj = cast(" ~ T.stringof ~ ") other){\n"
-        ~ opEqualsPart!(__traits(derivedMembers, T))
-        ~ "\treturn true;\n}\nreturn false;";
+unittest
+{
+    auto lhs = new AssertArguments();
+    auto rhs = new AssertArguments();
+    lhs.assertion = new AddExpression();
+    rhs.assertion = new AddExpression();
+    lhs.messageParts = [new NewExpression(), new AddExpression()];
+    rhs.messageParts = [new NewExpression(), new AddExpression()];
+    assert(lhs == rhs);
+    lhs.messageParts = [new NewExpression(), new AddExpression()];
+    rhs.messageParts = [new AddExpression(), new NewExpression()];
+    assert(lhs != rhs);
 }
 
 abstract class BaseNode : ASTNode
@@ -480,13 +540,19 @@ final class AliasDeclaration : BaseNode
             initializers, parameters, memberFunctionAttributes));
     }
     mixin OpEquals;
-    /** */ StorageClass[] storageClasses;
-    /** */ Type type;
-    /** */ DeclaratorIdentifierList declaratorIdentifierList;
-    /** */ AliasInitializer[] initializers;
+    /** Old syntax `storageClasses type declaratorIdentifierList` */
+    StorageClass[] storageClasses;
+    /** ditto */
+    Type type;
+    /** ditto */
+    DeclaratorIdentifierList declaratorIdentifierList;
+    /** New syntax e.g. `ident = Type` */
+    AliasInitializer[] initializers;
     /** */ string comment;
-    /** */ Parameters parameters;
-    /** */ MemberFunctionAttribute[] memberFunctionAttributes;
+    /** Old syntax `(parameters) memberFunctionAttributes` after a single identifier */
+    Parameters parameters;
+    /** ditto */
+    MemberFunctionAttribute[] memberFunctionAttributes;
 }
 
 ///
@@ -502,7 +568,12 @@ final class AliasAssign : BaseNode
     /** */ string comment;
 }
 
-///
+/**
+ * `name(templateParameters)`
+ * * `= storageClasses type`
+ * * `= storageClasses type(parameters) memberFunctionAttributes`
+ * * `= functionLiteralExpression`
+ */
 final class AliasInitializer : BaseNode
 {
     override void accept(ASTVisitor visitor) const
@@ -591,6 +662,33 @@ final class AnonymousEnumMember : BaseNode
 }
 
 ///
+final class NamedArgument : BaseNode
+{
+    override void accept(ASTVisitor visitor) const
+    {
+        mixin (visitIfNotNull!(name, assignExpression));
+    }
+    mixin OpEquals;
+    /** */ Token name;
+    /** */ ExpressionNode assignExpression;
+    /** */ size_t startLocation;
+    /** */ size_t endLocation;
+}
+
+///
+final class NamedArgumentList : BaseNode
+{
+	override void accept(ASTVisitor visitor) const
+    {
+        mixin (visitIfNotNull!(items));
+    }
+    mixin OpEquals;
+    /** */ NamedArgument[] items;
+    /** */ size_t startLocation;
+    /** */ size_t endLocation;
+}
+
+///
 final class ArgumentList : BaseNode
 {
     override void accept(ASTVisitor visitor) const
@@ -608,10 +706,10 @@ final class Arguments : BaseNode
 {
     override void accept(ASTVisitor visitor) const
     {
-        mixin (visitIfNotNull!(argumentList));
+        mixin (visitIfNotNull!(namedArgumentList));
     }
     mixin OpEquals;
-    /** */ ArgumentList argumentList;
+    /** */ NamedArgumentList namedArgumentList;
 }
 
 ///
@@ -870,11 +968,21 @@ final class AssertArguments : BaseNode
 {
     override void accept(ASTVisitor visitor) const
     {
-        mixin (visitIfNotNull!(assertion, message));
+        mixin (visitIfNotNull!(assertion, messageParts));
     }
+
     /** */ ExpressionNode assertion;
-    /** */ ExpressionNode message;
+    /** */ ExpressionNode[] messageParts;
     mixin OpEquals;
+
+    deprecated("use firstMessage or process all messageParts instead")
+    alias message = firstMessage;
+
+    /// Returns `messageParts[0]` or `null` if no messageParts.
+    inout(ExpressionNode) firstMessage() inout nothrow pure @nogc @safe
+    {
+        return messageParts.length ? messageParts[0] : null;
+    }
 }
 
 ///
@@ -916,20 +1024,54 @@ final class AssocArrayLiteral : BaseNode
     mixin OpEquals;
 }
 
-///
+/// User-defined `@attribute` attributes. Also includes `@disable`, `@nogc`,
+/// `@live`, etc. by simply having them be regular identifiers.
 final class AtAttribute : BaseNode
 {
     override void accept(ASTVisitor visitor) const
     {
-        mixin (visitIfNotNull!(templateInstance, argumentList));
+        mixin (visitIfNotNull!(templateInstance, argumentList, templateSingleArgument));
     }
-    /** */ ArgumentList argumentList;
-    /** */ TemplateInstance templateInstance;
-    /** */ Token identifier;
-    /** */ bool useParen;
+
+    /// Set for all of `@identifier(argumentList)`,
+    /// `@templateInstance!T(argumentList)` and `@(argumentListInParens)`.
+    ArgumentList argumentList;
+    /// When there is at least one template argument (`@id!T` or `@id!(T, U)`,
+    /// etc.), this is set instead of $(LREF identifier).
+    /// For regular `@identifier` or `@fn(args)` UDAs without template arguments,
+    /// `identifier` is set instead.
+    TemplateInstance templateInstance;
+    /// True for `@(argumentList)` code, as well as
+    /// `@templateInstance!T(argumentList)` and `@identifier(argumentList)`.
+    bool useParen;
+    /// For `@identifier`, the identifier part.
+    /// Not set for `@identifer!templateArgs`, see $(LREF templateInstance) for that.
+    /// This is however set for `@identifier(regularArguments)`.
+    Token identifier;
+    /// For `@int` or `@5`, the part after the `@`. May only be a single token,
+    /// may not be identifier (see $(LREF identifier) for that).
+    /// Introduced with DMD 2.104.0
+    TemplateSingleArgument templateSingleArgument;
+
     /** */ size_t startLocation;
     /** */ size_t endLocation;
     mixin OpEquals;
+
+    /// Returns either $(LREF identifier) or $(LREF templateSingleArgument),
+    /// whichever is set, otherwise `Token.init`.
+    ///
+    /// This is the single token after the `@` for `@identifier`, `@5`,
+    /// `@"string literal"`, etc.
+    ///
+    /// Not set if parens are used, e.g. not set for `@("string in parens")`.
+    Token token() const nothrow pure @nogc @safe scope
+    {
+        return identifier != tok!""
+            ? identifier
+            : templateSingleArgument
+                ? templateSingleArgument.token
+                : Token.init;
+    }
 }
 
 ///
@@ -1292,8 +1434,8 @@ final class Declaration : BaseNode
         }
     }
 
-    private import std.variant:Algebraic;
-    private import std.typetuple:TypeTuple;
+    import std.typetuple : TypeTuple;
+    import std.variant : Algebraic;
 
     alias DeclarationTypes = TypeTuple!(AliasDeclaration, AliasAssign, AliasThisDeclaration,
         AnonymousEnumDeclaration, AttributeDeclaration,
@@ -1393,13 +1535,25 @@ final class Declarator : BaseNode
 {
     override void accept(ASTVisitor visitor) const
     {
-        mixin (visitIfNotNull!(templateParameters, initializer));
+        mixin (visitIfNotNull!(templateParameters, bitfieldWidth, initializer));
     }
     /** */ Token name;
     /** */ TemplateParameters templateParameters;
+    /** */ BitfieldWidth bitfieldWidth;
     /** */ Initializer initializer;
     /** */ TypeSuffix[] cstyle;
     /** */ string comment;
+    mixin OpEquals;
+}
+
+///
+final class BitfieldWidth : BaseNode
+{
+    override void accept(ASTVisitor visitor) const
+    {
+        mixin (visitIfNotNull!(expression));
+    }
+    /** */ ExpressionNode expression;
     mixin OpEquals;
 }
 
@@ -1696,6 +1850,7 @@ final class ForeachType : BaseNode
     /** */ bool isAlias;
     /** */ bool isEnum;
     /** */ bool isRef;
+    /** */ bool isScope;
     /** */ IdType[] typeConstructors;
     /** */ Type type;
     /** */ Token identifier;
@@ -1806,10 +1961,24 @@ final class FunctionLiteralExpression : ExpressionNode
     /** */ Parameters parameters;
     /** */ Token identifier;
     /** */ Type returnType;
-    /** */ bool isReturnRef;
+    /** */ ReturnRefType returnRefType;
     /** */ size_t line;
     /** */ size_t column;
     mixin OpEquals;
+
+    deprecated("Use returnRefType") bool isReturnRef() const
+    {
+        return returnRefType == ReturnRefType.ref_
+            || returnRefType == ReturnRefType.autoRef;
+    }
+}
+
+///
+enum ReturnRefType : ubyte
+{
+    noRef = 0,
+    ref_ = 1,
+    autoRef = 2
 }
 
 ///
@@ -1934,18 +2103,78 @@ final class IfStatement : BaseNode
 {
     override void accept(ASTVisitor visitor) const
     {
-        mixin (visitIfNotNull!(identifier, type, expression, thenStatement,
-            elseStatement));
+        mixin (visitIfNotNull!(condition, thenStatement, elseStatement));
     }
-    /** */ IdType[] typeCtors;
-    /** */ Type type;
-    /** */ Token identifier;
-    /** */ Expression expression;
+    /** */ IfCondition condition;
     /** */ DeclarationOrStatement thenStatement;
     /** */ DeclarationOrStatement elseStatement;
     /** */ size_t startIndex;
     /** */ size_t line;
     /** */ size_t column;
+    mixin OpEquals;
+
+    deprecated("use condition.typeCtors") inout(IdType[]) typeCtors() inout @property
+    {
+        if (!condition)
+            return null;
+        return condition.typeCtors;
+    }
+
+    deprecated("use condition.type") inout(Type) type() inout @property
+    {
+        if (!condition)
+            return null;
+        return condition.type;
+    }
+
+    deprecated("use condition.identifier") inout(Token) identifier() inout @property
+    {
+        if (!condition)
+            return Token.init;
+        return condition.identifier;
+    }
+
+    deprecated("use condition.expression") inout(Expression) expression() inout @property
+    {
+        if (!condition)
+            return null;
+        return condition.expression;
+    }
+}
+
+/**
+In an if (or while) condition this represents:
+```
+if (auto x = readln)
+    ^^^^^^^^^^^^^^^
+
+if (a == b || c == d)
+    ^^^^^^^^^^^^^^^^
+```
+*/
+final class IfCondition : BaseNode
+{
+    override void accept(ASTVisitor visitor) const
+    {
+        mixin (visitIfNotNull!(type, identifier, expression));
+    }
+    /// In an assignment-condition, these are the optional type constructors
+    IdType[] typeCtors;
+    /// In an assignment-condition, this is the optional explicit type
+    Type type;
+    /// In an assignment-condition, in `if (auto x = ...)` this is the `x`
+    Token identifier;
+    /**
+    In an assignment-condition, this is true if `scope` is used to construct
+    the variable.
+    */
+    bool scope_;
+    /**
+    In an assignment-condition, this is the part after the equals sign.
+    Otherwise this is any other expression that is evaluated to be a boolean.
+    (e.g. UnaryExpression, AndAndExpression, CmpExpression, etc.)
+    */
+    Expression expression;
     mixin OpEquals;
 }
 
@@ -2118,6 +2347,87 @@ final class InterfaceDeclaration : BaseNode
     /** */ BaseClassList baseClassList;
     /** */ StructBody structBody;
     /** */ string comment;
+    mixin OpEquals;
+}
+
+///
+final class InterpolatedString : BaseNode
+{
+    override void accept(ASTVisitor visitor) const
+    {
+        mixin (visitIfNotNull!(parts));
+    }
+
+    /** */ InterpolatedStringPart[] parts;
+
+    inout(Token) startQuote() inout pure nothrow @nogc @safe scope
+    {
+        return tokens.length ? tokens[0] : Token.init;
+    }
+
+    inout(Token) endQuote() inout pure nothrow @nogc @safe scope
+    {
+        return tokens.length && tokens[$ - 1].type == tok!"istringLiteralEnd"
+            ? tokens[$ - 1]
+            : Token.init;
+    }
+
+    /// '\0'/'c'/'w'/'d' for `i""`, `i""c`, `i""w` and `i""d` respectively.
+    char postfixType() inout pure nothrow @nogc @safe scope
+    {
+        auto end = endQuote.text;
+        auto endChar = end.length ? end[$ - 1] : ' ';
+        switch (endChar)
+        {
+        case 'c':
+        case 'w':
+        case 'd':
+            return endChar;
+        default:
+            return '\0';
+        }
+    }
+
+    mixin OpEquals!("startQuote.text", "postfixType");
+}
+
+/// AST nodes within an interpolated string
+abstract class InterpolatedStringPart : BaseNode
+{
+}
+
+/// Just plain text inside the interpolated string
+final class InterpolatedStringText : InterpolatedStringPart
+{
+    override void accept(ASTVisitor visitor) const
+    {
+    }
+
+    /// The token containing the plain text part in its `.text` property.
+    inout(Token) text() inout pure nothrow @nogc @safe scope
+    {
+        return tokens.length ? tokens[0] : Token.init;
+    }
+
+    mixin OpEquals!("text.text");
+}
+
+/// A $(...) interpolation sequence
+final class InterpolatedStringExpression : InterpolatedStringPart
+{
+    override void accept(ASTVisitor visitor) const
+    {
+        mixin (visitIfNotNull!(expression));
+    }
+
+    /** */ Expression expression;
+
+    /// The dollar token.
+    inout(Token) dollar() inout pure nothrow @nogc @safe scope
+    {
+        return tokens.length ? tokens[0] : Token.init;
+    }
+
     mixin OpEquals;
 }
 
@@ -2601,7 +2911,7 @@ final class PrimaryExpression : ExpressionNode
                 typeofExpression, typeidExpression, arrayLiteral, assocArrayLiteral,
                 expression, dot, identifierOrTemplateInstance, isExpression,
                 functionLiteralExpression,traitsExpression, mixinExpression,
-                importExpression, vector, arguments));
+                importExpression, vector, arguments, interpolatedString));
     }
     /** */ Token dot;
     /** */ Token primary;
@@ -2621,6 +2931,7 @@ final class PrimaryExpression : ExpressionNode
     /** */ Type type;
     /** */ Token typeConstructor;
     /** */ Arguments arguments;
+    /** */ InterpolatedString interpolatedString;
     mixin OpEquals;
 }
 
@@ -2667,11 +2978,20 @@ final class ScopeGuardStatement : BaseNode
 {
     override void accept(ASTVisitor visitor) const
     {
-        mixin (visitIfNotNull!(identifier, statementNoCaseNoDefault));
+        mixin (visitIfNotNull!(identifier, declarationOrStatement));
     }
     /** */ Token identifier;
-    /** */ StatementNoCaseNoDefault statementNoCaseNoDefault;
+    /** */ DeclarationOrStatement declarationOrStatement;
     mixin OpEquals;
+
+    deprecated("Scope guards may also contain declarations")
+    inout(StatementNoCaseNoDefault) statementNoCaseNoDefault() inout @safe pure nothrow @nogc
+    {
+        if (!declarationOrStatement || !declarationOrStatement.statement)
+            return null;
+
+        return declarationOrStatement.statement.statementNoCaseNoDefault;
+    }
 }
 
 ///
@@ -2942,11 +3262,18 @@ final class SwitchStatement : BaseNode
 {
     override void accept(ASTVisitor visitor) const
     {
-        mixin (visitIfNotNull!(expression, statement));
+        mixin (visitIfNotNull!(condition, statement));
     }
-    /** */ Expression expression;
+    /** */ IfCondition condition;
     /** */ Statement statement;
     mixin OpEquals;
+
+    deprecated("use condition.expression") inout(Expression) expression() inout @property @safe nothrow @nogc pure
+    {
+        if (!condition)
+            return null;
+        return condition.expression;
+    }
 }
 
 ///
@@ -2992,6 +3319,30 @@ final class TemplateAliasParameter : BaseNode
 }
 
 ///
+final class NamedTemplateArgument : BaseNode
+{
+    override void accept(ASTVisitor visitor) const
+    {
+        mixin (visitIfNotNull!(name, type, assignExpression));
+    }
+    /** */ Token name;
+    /** */ Type type;
+    /** */ ExpressionNode assignExpression;
+    mixin OpEquals;
+}
+
+///
+final class NamedTemplateArgumentList : BaseNode
+{
+    override void accept(ASTVisitor visitor) const
+    {
+        mixin (visitIfNotNull!(items));
+    }
+    /** */ NamedTemplateArgument[] items;
+    mixin OpEquals;
+}
+
+///
 final class TemplateArgument : BaseNode
 {
     override void accept(ASTVisitor visitor) const
@@ -3019,9 +3370,9 @@ final class TemplateArguments : BaseNode
 {
     override void accept(ASTVisitor visitor) const
     {
-        mixin (visitIfNotNull!(templateArgumentList, templateSingleArgument));
+        mixin (visitIfNotNull!(namedTemplateArgumentList, templateSingleArgument));
     }
-    /** */ TemplateArgumentList templateArgumentList;
+    /** */ NamedTemplateArgumentList namedTemplateArgumentList;
     /** */ TemplateSingleArgument templateSingleArgument;
     mixin OpEquals;
 }
@@ -3120,9 +3471,10 @@ final class TemplateSingleArgument : BaseNode
 {
     override void accept(ASTVisitor visitor) const
     {
-        mixin (visitIfNotNull!(token));
+        mixin (visitIfNotNull!(token, istring));
     }
     /** */ Token token;
+    /** */ InterpolatedString istring;
     mixin OpEquals;
 }
 
@@ -3341,7 +3693,7 @@ final class UnaryExpression : ExpressionNode
     {
         // TODO prefix, postfix, unary
         mixin (visitIfNotNull!(primaryExpression, newExpression, deleteExpression,
-            castExpression, functionCallExpression, argumentList, unaryExpression,
+            castExpression, functionCallExpression, unaryExpression,
             type, identifierOrTemplateInstance, assertExpression, throwExpression,
             indexExpression));
     }
@@ -3355,7 +3707,6 @@ final class UnaryExpression : ExpressionNode
     /** */ DeleteExpression deleteExpression;
     /** */ CastExpression castExpression;
     /** */ FunctionCallExpression functionCallExpression;
-    /** */ ArgumentList argumentList;
     /** */ IdentifierOrTemplateInstance identifierOrTemplateInstance;
     /** */ AssertExpression assertExpression;
     /** */ ThrowExpression throwExpression;
@@ -3449,13 +3800,20 @@ final class WhileStatement : BaseNode
 {
     override void accept(ASTVisitor visitor) const
     {
-        mixin (visitIfNotNull!(expression, declarationOrStatement));
+        mixin (visitIfNotNull!(condition, declarationOrStatement));
     }
 
-    /** */ Expression expression;
+    /** */ IfCondition condition;
     /** */ DeclarationOrStatement declarationOrStatement;
     /** */ size_t startIndex;
     mixin OpEquals;
+
+    deprecated("use condition.expression") inout(Expression) expression() inout @property
+    {
+        if (!condition)
+            return null;
+        return condition.expression;
+    }
 }
 
 ///
@@ -3723,7 +4081,7 @@ unittest //#365 : used to segfault
 unittest // issue #398: Support extern(C++, <string expressions...>)
 {
     import dparse.lexer : LexerConfig;
-    import dparse.parser : ParserConfig, parseModule;
+    import dparse.parser : parseModule, ParserConfig;
     import dparse.rollback_allocator : RollbackAllocator;
 
     RollbackAllocator ra;

@@ -1,12 +1,14 @@
+import core.thread;
+import dparse.ast;
+import dparse.astprinter;
+import dparse.lexer;
+import dparse.parser;
+import dparse.rollback_allocator : RollbackAllocator;
 import std.array;
 import std.exception;
 import std.file;
 import std.getopt;
 import std.stdio;
-import dparse.ast;
-import dparse.lexer;
-import dparse.parser;
-import dparse.astprinter;
 
 int errorCount = 0;
 int warningCount = 0;
@@ -17,11 +19,15 @@ void messageFunction(string fileName, size_t line, size_t column,
     if (isError)
     {
         errorCount++;
-        stderr.writefln("%s(%d:%d)[error]: %s", fileName, line, column, message);
+        version (D_Coverage) {}
+        else
+            stderr.writefln("%s(%d:%d)[error]: %s", fileName, line, column, message);
     }
     else
     {
-        stderr.writefln("%s(%d:%d)[warn ]: %s", fileName, line, column, message);
+        version (D_Coverage) {}
+        else
+            stderr.writefln("%s(%d:%d)[warn ]: %s", fileName, line, column, message);
         warningCount++;
     }
 }
@@ -292,11 +298,56 @@ void testTokenChecks()
     }
 }
 
+void testArbitraryASTs()
+{
+    StringCache cache = StringCache(StringCache.defaultBucketCount);
+    LexerConfig config;
+    config.stringBehavior = StringBehavior.source;
+    RollbackAllocator rba;
+    string[] errors;
+    void msgDelegate(string fileName, size_t line, size_t column, string message, bool isError)
+    {
+        errors ~= message;
+    }
+    auto parser = new Parser();
+    parser.messageDelegate = &msgDelegate;
+    parser.allocator = &rba;
+
+    parser.tokens = getTokensForParser("struct S {}", config, &cache);
+    assert(parser.parseCompileCondition() is null);
+    assert(errors == ["`version`, `debug`, or `static` expected (found token `struct`)"]);
+    errors = null;
+
+    parser = new Parser();
+    parser.messageDelegate = &msgDelegate;
+    parser.allocator = &rba;
+    parser.tokens = getTokensForParser("~", config, &cache);
+    assert(parser.parseDestructor() is null);
+    assert(errors == ["`this` expected instead of EOF"]);
+    errors = null;
+
+    parser = new Parser();
+    parser.messageDelegate = &msgDelegate;
+    parser.allocator = &rba;
+    parser.tokens = getTokensForParser("for (x; y; z) {}", config, &cache);
+    assert(parser.parseForeach() is null);
+    assert(errors == ["`foreach` or `foreach_reverse` expected (found token `for`)"]);
+    errors = null;
+
+    parser = new Parser();
+    parser.messageDelegate = &msgDelegate;
+    parser.allocator = &rba;
+    parser.tokens = getTokensForParser("version =", config, &cache);
+    assert(parser.parseVersionSpecification() is null);
+    assert(errors == ["Identifier or integer literal expected (found EOF)"]);
+    errors = null;
+
+}
+
 int main(string[] args)
 {
-    import dparse.rollback_allocator : RollbackAllocator;
-
     version (D_Coverage) testTokenChecks();
+    version (D_Coverage) testArbitraryASTs();
 
     bool ast;
     getopt(args, "ast", &ast);
@@ -304,24 +355,44 @@ int main(string[] args)
     enforce(args.length > 1, "Must specifiy at least one D file");
     auto printer = new XMLPrinter;
     printer.output = stdout;
-    foreach (arg; args[1 .. $])
-    {
-        auto f = File(arg);
-        immutable ulong fileSize = f.size();
-        ubyte[] fileBytes = new ubyte[](fileSize);
-        enforce(f.rawRead(fileBytes).length == fileSize);
-        StringCache cache = StringCache(fileSize.optimalBucketCount);
-        LexerConfig config;
-        config.stringBehavior = StringBehavior.source;
-        config.fileName = arg;
-        const(Token)[] tokens = getTokensForParser(fileBytes, config, &cache);
-        RollbackAllocator rba;
-        auto mod = parseModule(ParserConfig(tokens, arg, &rba, &messageFunction));
-        if (ast && mod !is null)
-            printer.visit(mod);
-    }
+    bool done;
+
+    // increase stack size in case of segfault:
+    // stack usage in debug / non-optimized mode is _much_ higher
+    version (D_Coverage)
+        enum maxStackSize = 256 * 4096;
+    else debug
+        enum maxStackSize = 256 * 4096;
+    else
+        enum maxStackSize = 40 * 4096;
+
+    // use a fiber to limit stack size
+    new Fiber({
+        foreach (arg; args[1 .. $])
+        {
+            auto f = File(arg);
+            immutable ulong fileSize = f.size();
+            ubyte[] fileBytes = new ubyte[](fileSize);
+            enforce(f.rawRead(fileBytes).length == fileSize);
+            StringCache cache = StringCache(fileSize.optimalBucketCount);
+            LexerConfig config;
+            config.stringBehavior = StringBehavior.source;
+            config.fileName = arg;
+            const(Token)[] tokens = getTokensForParser(fileBytes, config, &cache);
+            RollbackAllocator rba;
+            auto mod = parseModule(ParserConfig(tokens, arg, &rba, &messageFunction));
+            if (ast && mod !is null)
+                printer.visit(mod);
+        }
+        done = true;
+    }, maxStackSize).call();
+    assert(done);
     if (!ast)
         writefln("Finished parsing with %d errors and %d warnings.",
                 errorCount, warningCount);
-    return errorCount == 0 ? 0 : 1;
+
+    version (D_Coverage)
+        return 0; // we don't care about error count in coverage mode
+    else
+        return errorCount == 0 ? 0 : 1;
 }

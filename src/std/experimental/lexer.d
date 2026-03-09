@@ -285,10 +285,10 @@ struct TokenStructure(IdType, string extraFields = "")
         * Params:
         *     type = the token type
         *     text = the text of the token, which may be null
-        *     line = the line number at which this token occurs
-        *     column = the column number at which this token occurs
+        *     line = the line number at which this token occurs, 1-based
+        *     column = the column number at which this token occurs, 1-based
         *     index = the byte offset from the beginning of the input at which this
-        *         token occurs
+        *         token occurs, 0-based
         */
         this(IdType type, string text, size_t line, size_t column, size_t index)
         {
@@ -300,24 +300,26 @@ struct TokenStructure(IdType, string extraFields = "")
         }
 
         /**
-        * The _text of the token.
+        * The text of the token for dynamic tokens. May be `null`, e.g. for
+        * static tokens.
         */
         string text;
 
         /**
-        * The _line number at which this token occurs.
+        * 1-based line number at which the start of this token occurs.
         */
         size_t line;
 
         /**
-        * The _column number at which this token occurs. This is measured in bytes
-        * and may not be correct when tab characters are involved.
+        * 1-based column number at which the start of this token occurs.
+        * This is measured in bytes and may not be correct when tab characters
+        * are involved.
         */
         size_t column;
 
         /**
-        * The byte offset from the beginning of the input at which this token
-        * occurs.
+        * 0-based byte offset from the beginning of the input at which the start
+        * of this token occurs.
         */
         size_t index;
 
@@ -448,7 +450,7 @@ mixin template Lexer(Token, alias defaultTokenFunction,
         return i;
     }
 
-    private static char[] getBeginningChars(string[] allTokens)
+    private static char[] getBeginningChars(immutable string[] allTokens)
     {
         char[] beginningChars;
         for (size_t i = 0; i < allTokens.length; i++)
@@ -469,8 +471,8 @@ mixin template Lexer(Token, alias defaultTokenFunction,
         import std.algorithm : sort;
         import std.range : stride;
 
-        string[] pseudoTokens = array(tokenHandlers.stride(2));
-        string[] allTokens = array(sort(staticTokens ~ possibleDefaultTokens ~ pseudoTokens).uniq());
+        immutable string[] pseudoTokens = array(tokenHandlers.stride(2));
+        immutable string[] allTokens = array(sort((staticTokens ~ possibleDefaultTokens ~ pseudoTokens).dup).uniq());
         // Array consisting of a sorted list of the first characters of the
         // tokens.
         char[] beginningChars = getBeginningChars(allTokens);
@@ -478,8 +480,8 @@ mixin template Lexer(Token, alias defaultTokenFunction,
         return generateStatementsStep(allTokens, pseudoTokens, beginningChars, i);
     }
 
-    private static string generateStatementsStep(string[] allTokens,
-        string[] pseudoTokens, char[] chars, size_t i, string indent = "")
+    private static string generateStatementsStep(immutable string[] allTokens,
+        immutable string[] pseudoTokens, char[] chars, size_t i, string indent = "")
     {
         import std.string : format;
         string code;
@@ -519,12 +521,12 @@ mixin template Lexer(Token, alias defaultTokenFunction,
         return code;
     }
 
-    private static string printCase(string[] tokens, string[] pseudoTokens, string indent)
+    private static string printCase(immutable string[] tokens, immutable string[] pseudoTokens, string indent)
     {
         import std.array : array;
         import std.algorithm : countUntil;
         import std.conv : text;
-        string[] sortedTokens = array(sort!"a.length > b.length"(tokens));
+        immutable string[] sortedTokens = array(sort!"a.length > b.length"(tokens.dup));
 
         if (tokens.length == 1 && tokens[0].length == 1)
         {

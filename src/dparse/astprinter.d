@@ -23,12 +23,12 @@ class XMLPrinter : ASTVisitor
 	{
 		output.writeln("<addExpression operator=\"", str(addExpression.operator), "\">");
 		output.writeln("<left>");
-		visit(addExpression.left);
+		dynamicDispatch(addExpression.left);
 		output.writeln("</left>");
 		if (addExpression.right !is null)
 		{
 			output.writeln("<right>");
-			visit(addExpression.right);
+			dynamicDispatch(addExpression.right);
 			output.writeln("</right>");
 		}
 		output.writeln("</addExpression>");
@@ -58,12 +58,12 @@ class XMLPrinter : ASTVisitor
 	{
 		output.writeln("<andAndExpression>");
 		output.writeln("<left>");
-		visit(andAndExpression.left);
+		dynamicDispatch(andAndExpression.left);
 		output.writeln("</left>");
 		if (andAndExpression.right !is null)
 		{
 			output.writeln("<right>");
-			visit(andAndExpression.right);
+			dynamicDispatch(andAndExpression.right);
 			output.writeln("</right>");
 		}
 		output.writeln("</andAndExpression>");
@@ -73,12 +73,12 @@ class XMLPrinter : ASTVisitor
 	{
 		output.writeln("<andExpression>");
 		output.writeln("<left>");
-		visit(andExpression.left);
+		dynamicDispatch(andExpression.left);
 		output.writeln("</left>");
 		if (andExpression.right !is null)
 		{
 			output.writeln("<right>");
-			visit(andExpression.right);
+			dynamicDispatch(andExpression.right);
 			output.writeln("</right>");
 		}
 		output.writeln("</andExpression>");
@@ -178,19 +178,26 @@ class XMLPrinter : ASTVisitor
 			output.writeln("<breakStatement label=\"", breakStatement.label.text, "\"/>");
 	}
 
+	override void visit(const BitfieldWidth bitfieldWidth)
+	{
+		output.writeln("<bitfieldWidth>");
+		bitfieldWidth.accept(this);
+		output.writeln("</bitfieldWidth>");
+	}
+
 	override void visit(const CaseRangeStatement caseRangeStatement)
 	{
 		output.writeln("<caseRangeStatement>");
 		if (caseRangeStatement.low !is null)
 		{
 			output.writeln("<low>");
-			visit(caseRangeStatement.low);
+			dynamicDispatch(caseRangeStatement.low);
 			output.writeln("</low>");
 		}
 		if (caseRangeStatement.high !is null)
 		{
 			output.writeln("<high>");
-			visit(caseRangeStatement.high);
+			dynamicDispatch(caseRangeStatement.high);
 			output.writeln("</high>");
 		}
 		if (caseRangeStatement.declarationsAndStatements !is null)
@@ -288,7 +295,7 @@ class XMLPrinter : ASTVisitor
 		if (deprecated_.assignExpression !is null)
 		{
 			output.writeln("<deprecated>");
-			visit(deprecated_.assignExpression);
+			dynamicDispatch(deprecated_.assignExpression);
 			output.writeln("</deprecated>");
 		}
 		else
@@ -313,7 +320,7 @@ class XMLPrinter : ASTVisitor
 			visit(enumMember.type);
 		output.write("<name>", enumMember.name.text, "</name>");
 		if (enumMember.assignExpression !is null)
-			visit(enumMember.assignExpression);
+			dynamicDispatch(enumMember.assignExpression);
 		output.writeln("</anonymousEnumMember>");
 	}
 
@@ -329,10 +336,10 @@ class XMLPrinter : ASTVisitor
 	{
 		output.writeln("<equalExpression operator=\"", str(equalExpression.operator), "\">");
 		output.writeln("<left>");
-		visit(equalExpression.left);
+		dynamicDispatch(equalExpression.left);
 		output.writeln("</left>");
 		output.writeln("<right>");
-		visit(equalExpression.right);
+		dynamicDispatch(equalExpression.right);
 		output.writeln("</right>");
 		output.writeln("</equalExpression>");
 	}
@@ -393,6 +400,10 @@ class XMLPrinter : ASTVisitor
 	override void visit(const ForeachType foreachType)
 	{
 		output.writeln("<foreachType>");
+		if (foreachType.isAlias) output.writeln("<alias/>");
+		if (foreachType.isEnum) output.writeln("<enum/>");
+		if (foreachType.isRef) output.writeln("<ref/>");
+		if (foreachType.isScope) output.writeln("<scope/>");
 		foreach (constructor; foreachType.typeConstructors)
 		{
 			output.writeln("<typeConstructor>", str(constructor), "</typeConstructor>");
@@ -419,10 +430,25 @@ class XMLPrinter : ASTVisitor
 
 	override void visit(const FunctionLiteralExpression functionLiteralExpression)
 	{
-		output.writeln("<functionLiteralExpression type=\"", functionLiteralExpression.functionOrDelegate != tok!""
-				? str(functionLiteralExpression.functionOrDelegate) : "auto", "\">");
-		functionLiteralExpression.accept(this);
-		output.writeln("</functionLiteralExpression>");
+		with (functionLiteralExpression)
+		{
+			output.write("<functionLiteralExpression type=\"",
+				functionOrDelegate != tok!"" ? str(functionOrDelegate) : "auto",
+				"\"");
+			if (identifier.type != tok!"")
+				output.write(" identifier=\"", identifier, "\"");
+			output.write(" line=\"", line, "\"");
+			output.write(" column=\"", column, "\"");
+			final switch (returnRefType) with (ReturnRefType)
+			{
+			case noRef: break;
+			case ref_: output.write(" ref=\"ref\""); break;
+			case autoRef: output.write(" ref=\"auto ref\""); break;
+			}
+			output.writeln(">");
+			accept(this);
+			output.writeln("</functionLiteralExpression>");
+		}
 	}
 
 	override void visit(const GotoStatement gotoStatement)
@@ -449,10 +475,10 @@ class XMLPrinter : ASTVisitor
 		else
 			output.writeln("<identityExpression operator=\"is\">");
 		output.writeln("<left>");
-		visit(identityExpression.left);
+		dynamicDispatch(identityExpression.left);
 		output.writeln("</left>");
 		output.writeln("<right>");
-		visit(identityExpression.right);
+		dynamicDispatch(identityExpression.right);
 		output.writeln("</right>");
 		output.writeln("</identityExpression>");
 	}
@@ -461,17 +487,7 @@ class XMLPrinter : ASTVisitor
 	{
 		output.writeln("<ifStatement>");
 
-		output.writeln("<condition>");
-		if (ifStatement.identifier.type != tok!"")
-		{
-			if (ifStatement.type is null)
-				output.writeln("<auto/>");
-			else
-				visit(ifStatement.type);
-			visit(ifStatement.identifier);
-		}
-		ifStatement.expression.accept(this);
-		output.writeln("</condition>");
+		ifStatement.condition.accept(this);
 
 		output.writeln("<then>");
 		ifStatement.thenStatement.accept(this);
@@ -484,6 +500,29 @@ class XMLPrinter : ASTVisitor
 			output.writeln("</else>");
 		}
 		output.writeln("</ifStatement>");
+	}
+
+	override void visit(const IfCondition ifCondition)
+	{
+		output.writeln("<condition>");
+		foreach (constructor; ifCondition.typeCtors)
+		{
+			output.writeln("<typeConstructor>", str(constructor), "</typeConstructor>");
+		}
+		if (ifCondition.identifier.type != tok!"")
+		{
+			if (ifCondition.scope_)
+				output.writeln("<scope/>");
+			else if (ifCondition.type is null)
+				output.writeln("<auto/>");
+
+			// in case `scope T` is possible eventually, check type separately
+			if (ifCondition.type)
+				visit(ifCondition.type);
+			visit(ifCondition.identifier);
+		}
+		ifCondition.expression.accept(this);
+		output.writeln("</condition>");
 	}
 
 	override void visit(const ImportBind importBind)
@@ -502,10 +541,10 @@ class XMLPrinter : ASTVisitor
 		else
 			output.writeln("<inExpression operator=\"in\">");
 		output.writeln("<left>");
-		visit(inExpression.left);
+		dynamicDispatch(inExpression.left);
 		output.writeln("</left>");
 		output.writeln("<right>");
-		visit(inExpression.right);
+		dynamicDispatch(inExpression.right);
 		output.writeln("</right>");
 		output.writeln("</inExpression>");
 	}
@@ -543,6 +582,28 @@ class XMLPrinter : ASTVisitor
 		output.writeln("</interfaceDeclaration>");
 	}
 
+	override void visit(const InterpolatedString interpolatedString)
+	{
+		output.writeln("<interpolatedString startQuote=\"",
+			xmlAttributeEscape(interpolatedString.startQuote.text),
+			"\" endQuote=\"",
+			xmlAttributeEscape(interpolatedString.endQuote.text),
+			"\">");
+		foreach (part; interpolatedString.parts)
+			dynamicDispatch(part);
+		output.writeln("</interpolatedString>");
+	}
+
+	override void visit(const InterpolatedStringText interpolatedStringText)
+	{
+		output.writeln("<text>", xmlEscape(interpolatedStringText.text.text), "</text>");
+	}
+
+	override void visit(const InterpolatedStringExpression interpolatedStringExpression)
+	{
+		visit(interpolatedStringExpression.expression);
+	}
+
 	override void visit(const Invariant invariant_)
 	{
 		output.writeln("<invariant>");
@@ -574,10 +635,10 @@ class XMLPrinter : ASTVisitor
 	{
 		output.writeln("<keyValuePair>");
 		output.writeln("<key>");
-		visit(keyValuePair.key);
+		dynamicDispatch(keyValuePair.key);
 		output.writeln("</key>");
 		output.writeln("<value>");
-		visit(keyValuePair.value);
+		dynamicDispatch(keyValuePair.value);
 		output.writeln("</value>");
 		output.writeln("</keyValuePair>");
 	}
@@ -637,12 +698,12 @@ class XMLPrinter : ASTVisitor
 	{
 		output.writeln("<mulExpression operator=\"", str(mulExpression.operator), "\">");
 		output.writeln("<left>");
-		visit(mulExpression.left);
+		dynamicDispatch(mulExpression.left);
 		output.writeln("</left>");
 		if (mulExpression.right !is null)
 		{
 			output.writeln("<right>");
-			visit(mulExpression.right);
+			dynamicDispatch(mulExpression.right);
 			output.writeln("</right>");
 		}
 		output.writeln("</mulExpression>");
@@ -652,12 +713,12 @@ class XMLPrinter : ASTVisitor
 	{
 		output.writeln("<orOrExpression>");
 		output.writeln("<left>");
-		visit(orOrExpression.left);
+		dynamicDispatch(orOrExpression.left);
 		output.writeln("</left>");
 		if (orOrExpression.right !is null)
 		{
 			output.writeln("<right>");
-			visit(orOrExpression.right);
+			dynamicDispatch(orOrExpression.right);
 			output.writeln("</right>");
 		}
 		output.writeln("</orOrExpression>");
@@ -688,12 +749,12 @@ class XMLPrinter : ASTVisitor
 	{
 		output.writeln("<powExpression>");
 		output.writeln("<left>");
-		visit(powExpression.left);
+		dynamicDispatch(powExpression.left);
 		output.writeln("</left>");
 		if (powExpression.right !is null)
 		{
 			output.writeln("<right>");
-			visit(powExpression.right);
+			dynamicDispatch(powExpression.right);
 			output.writeln("</right>");
 		}
 		output.writeln("</powExpression>");
@@ -704,10 +765,10 @@ class XMLPrinter : ASTVisitor
 		output.writeln("<relExpression operator=\"",
 				xmlAttributeEscape(str(relExpression.operator)), "\">");
 		output.writeln("<left>");
-		visit(relExpression.left);
+		dynamicDispatch(relExpression.left);
 		output.writeln("</left>");
 		output.writeln("<right>");
-		visit(relExpression.right);
+		dynamicDispatch(relExpression.right);
 		output.writeln("</right>");
 		output.writeln("</relExpression>");
 	}
@@ -729,10 +790,10 @@ class XMLPrinter : ASTVisitor
 		output.writeln("<shiftExpression operator=\"",
 				xmlAttributeEscape(str(shiftExpression.operator)), "\">");
 		output.writeln("<left>");
-		visit(shiftExpression.left);
+		dynamicDispatch(shiftExpression.left);
 		output.writeln("</left>");
 		output.writeln("<right>");
-		visit(shiftExpression.right);
+		dynamicDispatch(shiftExpression.right);
 		output.writeln("</right>");
 		output.writeln("</shiftExpression>");
 	}
@@ -765,7 +826,7 @@ class XMLPrinter : ASTVisitor
 		if (templateAliasParameter.colonExpression !is null)
 		{
 			output.writeln("<specialization>");
-			visit(templateAliasParameter.colonExpression);
+			dynamicDispatch(templateAliasParameter.colonExpression);
 			output.writeln("</specialization>");
 		}
 		else if (templateAliasParameter.colonType !is null)
@@ -778,7 +839,7 @@ class XMLPrinter : ASTVisitor
 		if (templateAliasParameter.assignExpression !is null)
 		{
 			output.writeln("<default>");
-			visit(templateAliasParameter.assignExpression);
+			dynamicDispatch(templateAliasParameter.assignExpression);
 			output.writeln("</default>");
 		}
 		else if (templateAliasParameter.assignType !is null)
@@ -923,14 +984,14 @@ class XMLPrinter : ASTVisitor
 					if (typeSuffix.high !is null)
 					{
 						output.writeln("<low>");
-						visit(typeSuffix.low);
+						dynamicDispatch(typeSuffix.low);
 						output.writeln("</low>");
 						output.writeln("<high>");
-						visit(typeSuffix.high);
+						dynamicDispatch(typeSuffix.high);
 						output.writeln("</high>");
 					}
 					else
-						visit(typeSuffix.low);
+						dynamicDispatch(typeSuffix.low);
 					output.writeln("</typeSuffix>");
 				}
 			}
@@ -1002,12 +1063,12 @@ class XMLPrinter : ASTVisitor
 	{
 		output.writeln("<xorExpression>");
 		output.writeln("<left>");
-		visit(xorExpression.left);
+		dynamicDispatch(xorExpression.left);
 		output.writeln("</left>");
 		if (xorExpression.right !is null)
 		{
 			output.writeln("<right>");
-			visit(xorExpression.right);
+			dynamicDispatch(xorExpression.right);
 			output.writeln("</right>");
 		}
 		output.writeln("</xorExpression>");
@@ -1019,15 +1080,15 @@ class XMLPrinter : ASTVisitor
 		if (index.high)
 		{
 			output.writeln("<low>");
-			visit(index.low);
+			dynamicDispatch(index.low);
 			output.writeln("</low>");
 
 			output.writeln("<high>");
-			visit(index.high);
+			dynamicDispatch(index.high);
 			output.writeln("</high>");
 		}
 		else
-			visit(index.low);
+			dynamicDispatch(index.low);
 		output.writeln("</index>");
 	}
 
@@ -1095,23 +1156,30 @@ class XMLPrinter : ASTVisitor
 	override void visit(const ImportBindings importBindings) { mixin (tagAndAccept!"importBindings"); }
 	override void visit(const ImportDeclaration importDeclaration) { mixin (tagAndAccept!"importDeclaration"); }
 	override void visit(const ImportExpression importExpression) { mixin (tagAndAccept!"importExpression"); }
-	override void visit(const IndexExpression indexExpression) { mixin (tagAndAccept!"indexExpression"); }
-	override void visit(const InStatement inStatement) { mixin (tagAndAccept!"inStatement"); }
 	override void visit(const InContractExpression inContractExpression) { mixin (tagAndAccept!"inContractExpression"); }
+	override void visit(const IndexExpression indexExpression) { mixin (tagAndAccept!"indexExpression"); }
 	override void visit(const InOutContractExpression inOutContractExpression) { mixin (tagAndAccept!"inOutContractExpression"); }
+	override void visit(const InStatement inStatement) { mixin (tagAndAccept!"inStatement"); }
 	override void visit(const KeyValuePairs keyValuePairs) { mixin (tagAndAccept!"keyValuePairs"); }
+	override void visit(const LastCatch lastCatch) { mixin (tagAndAccept!"lastCatch"); }
 	override void visit(const MixinExpression mixinExpression) { mixin (tagAndAccept!"mixinExpression"); }
 	override void visit(const MixinTemplateDeclaration mixinTemplateDeclaration) { mixin (tagAndAccept!"mixinTemplateDeclaration"); }
 	override void visit(const MixinTemplateName mixinTemplateName) { mixin (tagAndAccept!"mixinTemplateName"); }
 	override void visit(const ModuleDeclaration moduleDeclaration) { mixin (tagAndAccept!"moduleDeclaration"); }
-	override void visit(const LastCatch lastCatch) { mixin (tagAndAccept!"lastCatch"); }
+	override void visit(const NamedArgumentList namedArgumentList) { mixin (tagAndAccept!"namedArgumentList"); }
+	override void visit(const NamedArgument namedArgument) { mixin (tagAndAccept!"namedArgument"); }
+	override void visit(const NamedTemplateArgumentList namedTemplateArgumentList) { mixin (tagAndAccept!"namedTemplateArgumentList"); }
+	override void visit(const NamedTemplateArgument namedTemplateArgument) { mixin (tagAndAccept!"namedTemplateArgument"); }
 	override void visit(const NewExpression newExpression) { mixin (tagAndAccept!"newExpression"); }
 	override void visit(const NonVoidInitializer nonVoidInitializer) { mixin (tagAndAccept!"nonVoidInitializer"); }
 	override void visit(const Operands operands) { mixin (tagAndAccept!"operands"); }
 	override void visit(const OrExpression orExpression) { mixin (tagAndAccept!"orExpression"); }
-	override void visit(const OutStatement outStatement) { mixin (tagAndAccept!"outStatement"); } override void visit(const MixinDeclaration mixinDeclaration) { mixin (tagAndAccept!"mixinDeclaration"); }
+	override void visit(const OutStatement outStatement) { mixin (tagAndAccept!"outStatement"); }
+	override void visit(const MixinDeclaration mixinDeclaration) { mixin (tagAndAccept!"mixinDeclaration"); }
+	override void visit(const OutContractExpression outContractExpression) { mixin (tagAndAccept!"outContractExpression"); }
 	override void visit(const Parameters parameters) { mixin (tagAndAccept!"parameters"); }
-	override void visit(const Postblit postblit) { mixin (tagAndAccept!"postblit"); } override void visit(const NewAnonClassExpression newAnonClassExpression) { mixin (tagAndAccept!"newAnonClassExpression"); }
+	override void visit(const Postblit postblit) { mixin (tagAndAccept!"postblit"); }
+	override void visit(const NewAnonClassExpression newAnonClassExpression) { mixin (tagAndAccept!"newAnonClassExpression"); }
 	override void visit(const PragmaDeclaration pragmaDeclaration) { mixin (tagAndAccept!"pragmaDeclaration"); }
 	override void visit(const PragmaExpression pragmaExpression) { mixin (tagAndAccept!"pragmaExpression"); }
 	override void visit(const PrimaryExpression primaryExpression) { mixin (tagAndAccept!"primaryExpression"); }
@@ -1133,7 +1201,8 @@ class XMLPrinter : ASTVisitor
 	override void visit(const StructMemberInitializer structMemberInitializer) { mixin (tagAndAccept!"structMemberInitializer"); }
 	override void visit(const SwitchStatement switchStatement) { mixin (tagAndAccept!"switchStatement"); }
 	override void visit(const Symbol symbol) { mixin (tagAndAccept!"symbol"); }
-	override void visit(const SynchronizedStatement synchronizedStatement) { mixin (tagAndAccept!"synchronizedStatement"); } override void visit(const Statement statement) { mixin (tagAndAccept!"statement"); }
+	override void visit(const SynchronizedStatement synchronizedStatement) { mixin (tagAndAccept!"synchronizedStatement"); }
+	override void visit(const Statement statement) { mixin (tagAndAccept!"statement"); }
 	override void visit(const TemplateArgumentList templateArgumentList) { mixin (tagAndAccept!"templateArgumentList"); }
 	override void visit(const TemplateArguments templateArguments) { mixin (tagAndAccept!"templateArguments"); }
 	override void visit(const TemplateArgument templateArgument) { mixin (tagAndAccept!"templateArgument"); }
@@ -1150,13 +1219,17 @@ class XMLPrinter : ASTVisitor
 	override void visit(const TernaryExpression ternaryExpression) { mixin (tagAndAccept!"ternaryExpression"); }
 	override void visit(const TypeIdentifierPart typeIdentifierPart) { mixin (tagAndAccept!"typeIdentifierPart"); }
 	override void visit(const ThrowExpression throwExpression) { mixin (tagAndAccept!"throwExpression"); }
-	override void visit(const TryStatement tryStatement) { mixin (tagAndAccept!"tryStatement"); } override void visit(const TemplateInstance templateInstance) { mixin (tagAndAccept!"templateInstance"); }
-	override void visit(const TypeofExpression typeofExpression) { mixin (tagAndAccept!"typeofExpression"); } override void visit(const TypeSpecialization typeSpecialization) { mixin (tagAndAccept!"typeSpecialization"); } override void visit(const TraitsExpression traitsExpression) { mixin (tagAndAccept!"traitsExpression"); }
+	override void visit(const TryStatement tryStatement) { mixin (tagAndAccept!"tryStatement"); }
+	override void visit(const TemplateInstance templateInstance) { mixin (tagAndAccept!"templateInstance"); }
+	override void visit(const TypeofExpression typeofExpression) { mixin (tagAndAccept!"typeofExpression"); }
+	override void visit(const TypeSpecialization typeSpecialization) { mixin (tagAndAccept!"typeSpecialization"); }
+	override void visit(const TraitsExpression traitsExpression) { mixin (tagAndAccept!"traitsExpression"); }
 	override void visit(const Vector vector) { mixin (tagAndAccept!"vector"); }
 	override void visit(const VersionCondition versionCondition) { mixin (tagAndAccept!"versionCondition"); }
 	override void visit(const VersionSpecification versionSpecification) { mixin (tagAndAccept!"versionSpecification"); }
 	override void visit(const WhileStatement whileStatement) { mixin (tagAndAccept!"whileStatement"); }
-	override void visit(const WithStatement withStatement) { mixin (tagAndAccept!"withStatement"); } override void visit(const TypeidExpression typeidExpression) { mixin (tagAndAccept!"typeidExpression"); }
+	override void visit(const WithStatement withStatement) { mixin (tagAndAccept!"withStatement"); }
+	override void visit(const TypeidExpression typeidExpression) { mixin (tagAndAccept!"typeidExpression"); }
 	// dfmt on
 
 	alias visit = ASTVisitor.visit;

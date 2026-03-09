@@ -10,13 +10,13 @@ struct StackBuffer
 {
     bool put(T)(T t)
     {
-        import std.experimental.allocator.mallocator;
+        import std.experimental.allocator.mallocator : Mallocator;
 
         static if (is(T == class) || isPointer!T)
             if (t is null)
                 return false;
 
-        if (_length == 0)
+        if (_length == 0 && arr is null)
             arr = stackSpace[];
 
         static if (is(T == class))
@@ -70,7 +70,7 @@ struct StackBuffer
         }
     }
 
-    void[] opSlice()
+    inout(void[]) opSlice() inout pure nothrow @nogc @safe return scope
     {
         return arr[0 .. _length];
     }
@@ -83,6 +83,11 @@ struct StackBuffer
     }
 
     alias opDollar = length;
+
+    void clear()
+    {
+        _length = 0;
+    }
 
 private:
 
@@ -120,4 +125,42 @@ unittest
 
     B d = new D;
     sb.put(d);
+}
+
+package struct TypedStackBuffer(T)
+if (__traits(isPOD, T))
+{
+    void push(T value) @trusted
+    {
+        sb.put(value);
+    }
+
+    void opOpAssign(string op : "~")(T value)
+    {
+        push(value);
+    }
+
+    ref inout(T) back() inout pure nothrow @nogc @safe @property
+    {
+        return (cast(inout(T)[])sb.opSlice[$ - T.sizeof .. $])[0];
+    }
+
+    void popBack() pure nothrow @nogc @safe @property
+    {
+        assert(!empty);
+        sb._length -= T.sizeof;
+    }
+
+    bool empty() const pure nothrow @nogc @safe @property
+    {
+        return sb.length == 0;
+    }
+
+    uint length() const pure nothrow @nogc @safe @property
+    {
+        return sb.length / T.sizeof;
+    }
+
+private:
+    StackBuffer sb;
 }

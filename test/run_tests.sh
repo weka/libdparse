@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-PASS_FILES=$(find pass_files -name "*.d")
-FAIL_FILES=$(find fail_files -name "*.d")
+PASS_FILES=$(find pass_files -name "*.d" | sort)
+FAIL_FILES=$(find fail_files -name "*.d" | sort)
 PASS_COUNT=0
 FAIL_COUNT=0
 NORMAL="\033[01;0m"
@@ -12,34 +12,48 @@ RED="\033[31m"
 YELLOW="\033[33m"
 DMD=${DMD:=dmd}
 SOURCE_FILES="../src/std/experimental/*.d ../src/dparse/*.d "
-STDX_ALLOC_FILES=$(find ../stdx-allocator/source -name "*.d" )
-IMPORT_PATHS="-I../src/ -I../stdx-allocator/source"
-
-${DMD} $STDX_ALLOC_FILES $IMPORT_PATHS -of"stdxalloc.a" -lib
+IMPORT_PATHS="-I../src/"
 
 echo -en "Compiling parse tester... "
-${DMD} tester.d $SOURCE_FILES -g "stdxalloc.a" $IMPORT_PATHS
+${DMD} tester.d -debug $SOURCE_FILES -g $IMPORT_PATHS
 echo -e "${GREEN}DONE${NORMAL}"
+
+test_fail() {
+	set +e
+	./tester "$@"
+	test_fail_status=$?
+	set -e
+	if [ $test_fail_status -eq 1 ]; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+# if tester segfaults, it's most likely due to a stack overflow
+# check the maxStackSize variable in tester.d in that case
+# (increasing it should be avoided if it's possible to implement tail recursion or other stack saving techniques)
 
 for i in $PASS_FILES; do
 	echo -en "Parsing $i..."
 	if ./tester "$i" 2>/dev/null 1>/dev/null; then
-		echo -e "${GREEN}PASS${NORMAL}"
+		echo -e "\t${GREEN}PASS${NORMAL}"
 		((PASS_COUNT=PASS_COUNT+1))
 	else
-		echo -e "${RED}FAIL${NORMAL}"
+		echo -e "\t${RED}FAIL${NORMAL}"
 		((FAIL_COUNT=FAIL_COUNT+1))
+		./tester "$i"
 	fi
 done
 
 for i in $FAIL_FILES; do
 	echo -en "Parsing $i..."
-	if ./tester "$i" 2>/dev/null 1>/dev/null; then
-		echo -e "${RED}FAIL${NORMAL}"
-		((FAIL_COUNT=FAIL_COUNT+1))
-	else
-		echo -e "${GREEN}PASS${NORMAL}"
+	if test_fail "$i" 2>/dev/null 1>/dev/null; then
+		echo -e "\t${GREEN}PASS${NORMAL}"
 		((PASS_COUNT=PASS_COUNT+1))
+	else
+		echo -e "\t${RED}FAIL${NORMAL}"
+		((FAIL_COUNT=FAIL_COUNT+1))
 	fi
 done
 
@@ -61,22 +75,48 @@ if [[ ${BUILDKITE:-} != "true" ]]; then
 		# with a txt extension. It contains XPath expressions, one per line, that
 		# must match nodes in the generated AST.
 		queryFile=ast_checks/$(basename "$file" .d).txt
-		checkCount=1
+		lineCount=1
 		currentPasses=0
 		currentFailures=0
-		while read -r line; do
-			if ./tester --ast "$file" | xmllint --xpath "${line}" - 2>/dev/null > /dev/null; then
-				((currentPasses=currentPasses+1))
-			else
+		expectParseFailure=0
+		set +e
+		AST="$(./tester --ast "$file" 2>/dev/null)"
+		test_fail_status=$?
+		set -e
+		while read -r line || [ -n "$line" ]; do
+			if [[ "$line" == "INCLUDES_PARSE_ERROR" ]]; then
+				expectParseFailure=1
+			elif [[ "$line" =~ ^# ]]; then
+				true # comment line
+			elif echo "$AST" | xmllint --xpath "${line}" - 2>&1 | grep 'XPath set is empty' >/dev/null; then
 				echo
-				echo -e "    ${RED}Check on line $checkCount of $queryFile failed.${NORMAL}"
+				echo -e "    ${RED}Check on line $lineCount of $queryFile failed.${NORMAL}"
+				((currentFailures=currentFailures+1))
+			else
+				((currentPasses=currentPasses+1))
+			fi
+			((lineCount=lineCount+1))
+		done < "$queryFile"
+
+		if [[ $expectParseFailure -eq 0 ]]; then
+			if [[ $test_fail_status -ne 0 ]]; then
+				echo -e "    ${RED}D parsing of $queryFile failed in general.${NORMAL}"
+				./tester --ast "$file" >/dev/null
 				((currentFailures=currentFailures+1))
 			fi
-			((checkCount=checkCount+1))
-		done < "$queryFile"
+		fi
+
 		if [[ $currentFailures -gt 0 ]]; then
 			echo -e "    ${RED}${currentPasses} check(s) passed and ${currentFailures} check(s) failed${NORMAL}"
 			((FAIL_COUNT=FAIL_COUNT+1))
+
+			if [ -z "${VERBOSE:-}" ]; then
+				echo -e "    Run with VERBOSE=1 to print AST XML"
+			else
+				echo
+				./tester --ast "$file" | xmllint --format -
+				echo
+			fi
 		else
 			echo -e " ${GREEN}${currentPasses} check(s) passed and ${currentFailures} check(s) failed${NORMAL}"
 			((PASS_COUNT=PASS_COUNT+1))
@@ -103,8 +143,11 @@ fi
 echo
 find . -name "*.lst" -exec rm -f {} \;
 echo -en "Generating coverage reports... "
-${DMD} tester.d -cov -unittest $SOURCE_FILES "stdxalloc.a" $IMPORT_PATHS
-./tester --ast --DRT-testmode=run-main $PASS_FILES $FAIL_FILES &> /dev/null || true
+${DMD} tester.d -debug -cov -unittest $SOURCE_FILES $IMPORT_PATHS
+# if tester segfaults, it's most likely due to a stack overflow
+# check the maxStackSize variable in tester.d in that case
+# (increasing it should be avoided if it's possible to implement tail recursion or other stack saving techniques)
+./tester --ast --DRT-testmode=run-main $PASS_FILES $FAIL_FILES ast_checks/*.d > /dev/null
 rm -rf coverage/
 mkdir coverage/
 find . -name "*.lst" | while read -r i; do
@@ -113,7 +156,7 @@ find . -name "*.lst" | while read -r i; do
 done
 echo -e "${GREEN}DONE${NORMAL}"
 for i in coverage/*.lst; do
-	tail "$i" -n1
+	tail -n1 "$i"
 done
 
 rm -f tester.o

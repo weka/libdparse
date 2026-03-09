@@ -12,8 +12,8 @@ version (unittest)
 {
     import dparse.parser;
     import dparse.rollback_allocator;
-    import std.array : Appender;
     import std.algorithm : canFind;
+    import std.array : Appender;
 }
 
 //debug = verbose;
@@ -244,6 +244,29 @@ class Formatter(Sink)
         }
     }
 
+    void format(const NamedArgument argument)
+    {
+        debug(verbose) writeln("NamedArgument");
+
+        if (argument.name != tok!"")
+        {
+            format(argument.name);
+            put(": ");
+        }
+        format(argument.assignExpression);
+    }
+
+    void format(const NamedArgumentList argumentList)
+    {
+        debug(verbose) writeln("NamedArgumentList");
+
+        foreach(count, arg; argumentList.items)
+        {
+            if (count) put(", ");
+            format(arg);
+        }
+    }
+
     void format(const ArgumentList argumentList)
     {
         debug(verbose) writeln("ArgumentList");
@@ -260,7 +283,7 @@ class Formatter(Sink)
         debug(verbose) writeln("Arguments");
 
         put("(");
-        if (arguments.argumentList) format(arguments.argumentList);
+        if (arguments.namedArgumentList) format(arguments.namedArgumentList);
         put(")");
     }
 
@@ -406,18 +429,13 @@ class Formatter(Sink)
     {
         debug(verbose) writeln("AssertExpression");
 
-        /**
-        AssignExpression assertion;
-        AssignExpression message;
-        **/
-
         with(assertArguments)
         {
             format(assertion);
-            if (message)
+            foreach (part; messageParts)
             {
                 put(", ");
-                format(message);
+                format(part);
             }
         }
     }
@@ -486,8 +504,13 @@ class Formatter(Sink)
         with(atAttribute)
         {
             put("@");
-            format(identifier);
+            format(token);
+            if (templateInstance) format(templateInstance);
+            if (useParen)
+                put("(");
             if(argumentList) format(argumentList);
+            if (useParen)
+                put(")");
         }
     }
 
@@ -1043,6 +1066,12 @@ class Formatter(Sink)
         foreach(suffix; declarator.cstyle)
             format(suffix);
 
+        if (declarator.bitfieldWidth)
+        {
+            put(declarator.name is Token.init ? ": " : " : ");
+            format(declarator.bitfieldWidth.expression);
+        }
+
         if (declarator.templateParameters)
             format(declarator.templateParameters);
 
@@ -1149,7 +1178,7 @@ class Formatter(Sink)
             if (member.comment.length)
             {
                 space();
-                put(member.comment);
+                putComment(member.comment);
             }
         }
         endBlock();
@@ -1468,6 +1497,7 @@ class Formatter(Sink)
         with(functionBody)
         {
             if (specifiedFunctionBody) format(specifiedFunctionBody);
+            if (shortenedFunctionBody) format(shortenedFunctionBody);
             if (missingFunctionBody) format(missingFunctionBody);
         }
     }
@@ -1554,23 +1584,17 @@ class Formatter(Sink)
     void format(const FunctionLiteralExpression functionLiteralExpression)
     {
         debug(verbose) writeln("FunctionLiteralExpression");
-        /**
-        ExpressionNode assignExpression;
-        FunctionAttribute[] functionAttributes;
-        SpecifiedFunctionBody specifiedFunctionBody;
-        IdType functionOrDelegate;
-        MemberFunctionAttribute[] memberFunctionAttributes;
-        Parameters parameters;
-        Token identifier;
-        Type returnType;
-        bool isReturnRef;
-        **/
 
         with(functionLiteralExpression)
         {
             put(tokenRep(functionOrDelegate));
 
-            if (isReturnRef) put("ref ");
+            final switch (returnRefType)
+            {
+                case ReturnRefType.noRef: break;
+                case ReturnRefType.ref_: put("ref "); break;
+                case ReturnRefType.autoRef: put("auto ref "); break;
+            }
             //if (returnType || parameters)
               //  space();
 
@@ -1708,29 +1732,8 @@ class Formatter(Sink)
 
         with(ifStatement)
         {
-            bool isAuto = identifier != tok!"" && !type;
-            bool isAssign = isAuto || type || typeCtors.length;
-
             put("if (");
-
-            if (isAuto) put("auto ");
-            foreach(tct; typeCtors)
-            {
-                put(str(tct));
-                space();
-            }
-            if (type)
-            {
-                format(type);
-                space();
-            }
-            if (identifier != tok!"")
-            {
-                format(identifier);
-                space();
-            }
-            if (isAssign) put("= ");
-            if (expression) format(expression);
+            format(condition);
             put(")");
 
             if (thenStatement)
@@ -1752,6 +1755,38 @@ class Formatter(Sink)
                     maybeIndent(elseStatement);
             }
 
+        }
+    }
+
+    void format(const IfCondition ifCondition)
+    {
+        debug(verbose) writeln("IfCondition");
+
+        with(ifCondition)
+        {
+            bool isAuto = identifier != tok!"" && !type && !scope_;
+            bool isScope = identifier != tok!"" && scope_;
+            bool isAssign = isAuto || isScope || type || typeCtors.length;
+
+            if (isAuto) put("auto ");
+            if (isScope) put("scope ");
+            foreach(tct; typeCtors)
+            {
+                put(str(tct));
+                space();
+            }
+            if (type)
+            {
+                format(type);
+                space();
+            }
+            if (identifier != tok!"")
+            {
+                format(identifier);
+                space();
+            }
+            if (isAssign) put("= ");
+            if (expression) format(expression);
         }
     }
 
@@ -1976,6 +2011,29 @@ class Formatter(Sink)
             else
                 put(";");
         }
+    }
+
+    void format(const InterpolatedString interpolatedString)
+    {
+        put(interpolatedString.startQuote.text);
+        foreach (part; interpolatedString.parts)
+        {
+            if (cast(InterpolatedStringText) part) format(cast(InterpolatedStringText) part);
+            else if (cast(InterpolatedStringExpression) part) format(cast(InterpolatedStringExpression) part);
+        }
+        put(interpolatedString.endQuote.text);
+    }
+
+    void format(const InterpolatedStringText interpolatedStringText)
+    {
+        put(interpolatedStringText.text.text);
+    }
+
+    void format(const InterpolatedStringExpression interpolatedStringExpression)
+    {
+        put("$(");
+        format(interpolatedStringExpression.expression);
+        put(")");
     }
 
     void format(const Invariant invariant_, const Attribute[] attrs = null)
@@ -2537,6 +2595,7 @@ class Formatter(Sink)
         Type type;
         Token typeConstructor;
         Arguments arguments;
+        InterpolatedString interpolatedString;
         **/
 
         with(primaryExpression)
@@ -2571,6 +2630,7 @@ class Formatter(Sink)
             else if (vector) format(vector);
             else if (type) format(type);
             else if (arguments) format(arguments);
+            else if (interpolatedString) format(interpolatedString);
         }
     }
 
@@ -2605,7 +2665,7 @@ class Formatter(Sink)
 
         /**
         Token identifier;
-        StatementNoCaseNoDefault statementNoCaseNoDefault;
+        DeclarationOrStatement declarationOrStatement;
         **/
 
         with(scopeGuardStatement)
@@ -2614,7 +2674,7 @@ class Formatter(Sink)
             format(identifier);
             put(")");
             indent();
-            format(statementNoCaseNoDefault);
+            format(declarationOrStatement);
             outdent();
         }
     }
@@ -2656,7 +2716,7 @@ class Formatter(Sink)
     void format(const ShortenedFunctionBody shortenedFunctionBody)
     {
         debug(verbose) writeln("ShortenedFunctionBody");
-        put("=> ");
+        put(" => ");
         format(shortenedFunctionBody.expression);
         put(";");
     }
@@ -2924,7 +2984,7 @@ class Formatter(Sink)
         debug(verbose) writeln("SwitchStatement");
 
         /**
-        Expression expression;
+        IfCondition condition;
         Statement statement;
         **/
 
@@ -2932,7 +2992,7 @@ class Formatter(Sink)
         {
             newThing(What.other);
             isFinal ? put(" final switch(") : put("switch(");
-            format(expression);
+            format(condition);
             put(")");
 
             bool needBlock = statement.statementNoCaseNoDefault &&
@@ -3023,6 +3083,21 @@ class Formatter(Sink)
         }
     }
 
+    void format(const NamedTemplateArgument namedTemplateArgument)
+    {
+        debug(verbose) writeln("NamedTemplateArgument");
+        with(namedTemplateArgument)
+        {
+            if (name != tok!"")
+            {
+                put(name.text);
+                put(": ");
+            }
+            if (type) format(type);
+            if (assignExpression) format(assignExpression);
+        }
+    }
+
     void format(const TemplateArgument templateArgument)
     {
         debug(verbose) writeln("TemplateArgument");
@@ -3037,6 +3112,19 @@ class Formatter(Sink)
             if (type) format(type);
             if (assignExpression) format(assignExpression);
         }
+    }
+
+    void format(const NamedTemplateArgumentList namedTemplateArgumentList, bool parens = true)
+    {
+        debug(verbose) writeln("NamedTemplateArgumentList");
+
+        if (parens) put("!(");
+        foreach(count, arg; namedTemplateArgumentList.items)
+        {
+            if (count) put(", ");
+            format(arg);
+        }
+        if (parens) put(")");
     }
 
     void format(const TemplateArgumentList templateArgumentList, bool parens = true)
@@ -3063,7 +3151,7 @@ class Formatter(Sink)
 
         with(templateArguments)
         {
-            if (templateArgumentList) format(templateArgumentList);
+            if (namedTemplateArgumentList) format(namedTemplateArgumentList);
             else if (templateSingleArgument) format(templateSingleArgument);
             else put("!()");
         }
@@ -3195,7 +3283,10 @@ class Formatter(Sink)
         **/
 
         put("!");
-        format(templateSingleArgument.token);
+        if (templateSingleArgument.istring)
+            format(templateSingleArgument.istring);
+        else
+            format(templateSingleArgument.token);
     }
 
     void format(const TemplateThisParameter templateThisParameter)
@@ -3574,23 +3665,12 @@ class Formatter(Sink)
         {
             if (prefix != tok!"") format(prefix);
 
-            if (type)
+            if (type && identifierOrTemplateInstance)
             {
                 // handle things like (void*).sizeof
-                if (identifierOrTemplateInstance)
-                {
-                    put("(");
-                    format(type);
-                    put(")");
-                }
-                else
-                {
-                    format(type);
-                    put("(");
-                    if (argumentList)
-                        format(argumentList);
-                    put(")");
-                }
+                put("(");
+                format(type);
+                put(")");
             }
 
             if (primaryExpression) format(primaryExpression);
@@ -3731,14 +3811,9 @@ class Formatter(Sink)
     {
         debug(verbose) writeln("WhileStatement");
 
-        /**
-        Expression expression;
-        DeclarationOrStatement declarationOrStatement;
-        **/
-
         newThing(What.other);
         put("while (");
-        format(stmt.expression);
+        format(stmt.condition);
         put(")");
         maybeIndent(stmt.declarationOrStatement);
     }
@@ -3954,7 +4029,7 @@ protected:
     {
         import std.string : splitLines;
         if (!c.length) return;
-        put(c.splitLines().join("\n" ~ getIndent()));
+        put(c.splitLines().map!((x) => "/// " ~ x).join("\n" ~ getIndent()));
         newlineIndent();
     }
 
@@ -4255,9 +4330,81 @@ do
 }`
 );
     testFormatNode!(Declaration)(q{int i = throw new Ex();});
+    testFormatNode!(Declaration)(q{int i : 4 = 1;});
+    testFormatNode!(Declaration)(q{int i : (4 * 2) = 1;});
+    testFormatNode!(Declaration)(q{int i : (4 * 2);});
+    testFormatNode!(Declaration)(q{int i : coolTemplate!(4);});
+    testFormatNode!(Declaration)(q{int i : justAFunction(4);});
+    testFormatNode!(Declaration)(q{int i : 8;});
+    testFormatNode!(Declaration)(q{int x : 3, y : 2;});
+    testFormatNode!(Declaration)(q{int : 3, y : 2;});
+    testFormatNode!(Declaration)(q{int : 3, : 2;});
     testFormatNode!(FunctionDeclaration)(q{void someFunction()
 {
     foo(a, throw b, c);
     return throw new Exception("", "");
 }});
+    testFormatNode!(Declaration)(q{@true long x;});
+    testFormatNode!(Declaration)(q{@(true) long x;});
+    testFormatNode!(Declaration)(q{@f(true) long x;});
+    testFormatNode!(Declaration)(q{@f long x;});
+    testFormatNode!(Declaration)(q{@f() long x;});
+    testFormatNode!(Declaration)(q{@f!T(true) long x;});
+    testFormatNode!(Declaration)(q{@f!T long x;});
+    testFormatNode!(Declaration)(q{@(f!T) long x;});
+
+    testFormatNode!(IfCondition)(q{void foo()
+{
+    if (scope x = readln())
+    {
+    }
+}}, `scope x = readln()`);
+    testFormatNode!(IfCondition)(q{void foo()
+{
+    if (auto x = readln())
+    {
+    }
+}}, `auto x = readln()`);
+    testFormatNode!(IfCondition)(q{void foo()
+{
+    while (const inout string x = readln())
+    {
+    }
+}}, `const inout string x = readln()`);
+    testFormatNode!(IfStatement)(q{void foo()
+{
+    if (a == b && c == d)
+    {
+    }
+}}, `a == b && c == d`);
+    testFormatNode!(FunctionDeclaration)(q{void foo() => writeln("Hello");});
+    testFormatNode!(VariableDeclaration)(q{/// Documentation for this variable
+/// which is even multilined.
+int x;});
+    testFormatNode!(EnumDeclaration)(q{enum Foo {
+        x, /// Documentation for x
+        y, /// Documentation for y
+        z, /// Documentation for z
+}}, "enum Foo 
+
+{
+x, /// Documentation for x
+    
+y, /// Documentation for y
+    
+z /// Documentation for z
+    
+}");
+    testFormatNode!(VariableDeclaration)(`T x = i"hello";`);
+    testFormatNode!(VariableDeclaration)(`T x = i" hello ";`);
+    testFormatNode!(VariableDeclaration)(`T x = i" hello $name ";`);
+    testFormatNode!(VariableDeclaration)(`T x = i" hello $(name) ";`);
+    testFormatNode!(VariableDeclaration)(`T x = i" hello $( name ) ";`, `T x = i" hello $(name) ";`);
+    testFormatNode!(VariableDeclaration)(`auto a = iq{ "}" hi };`, `auto a = iq{ "}" hi };`);
+    testFormatNode!(VariableDeclaration)("T x = iq{\n};");
+    testFormatNode!(AliasDeclaration)(`alias expr = AliasSeq!i"$(a) $(b)";`);
+    testFormatNode!(VariableDeclaration)("auto thing = i\"$(b) $(\"$\" ~ ')' ~ `\"`)\";");
+    testFormatNode!(VariableDeclaration)("auto x = i` $(b) is $(b)!`;");
+    testFormatNode!(VariableDeclaration)("auto x = iq{ $(b) is $(b)!};");
+    testFormatNode!(VariableDeclaration)("auto x = iq{{$('$')}};");
 }
