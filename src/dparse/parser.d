@@ -3342,6 +3342,14 @@ class Parser
             error("`foreach` or `foreach_reverse` expected", true, true);
             return null;
         }
+        // Weka LDC fork: glued caller-attr loop marker `foreach@mayYield (...)`.
+        // Consume an optional `@ Identifier` between the keyword and the `(` as a no-op
+        // so the loop keeps parsing (libdparse otherwise chokes on the `@`).
+        if (currentIs(tok!"@") && peekIs(tok!"identifier"))
+        {
+            advance(); // @
+            advance(); // marker identifier
+        }
         if (moreTokens)
             node.startIndex = current().index;
         mixin(tokenCheck!"(");
@@ -8092,6 +8100,16 @@ class Parser
             else
                 n.identifierOrTemplateInstance = parseIdentifierOrTemplateInstance();
             node = n;
+            break;
+        case tok!"@":
+            // Caller-attribute postfix marker (e.g. `foo() @mayYield`), added in Weka's LDC fork.
+            // It carries no semantics for the parser; consume `@ Identifier` as a no-op postfix so
+            // expression/function boundaries stay correct (libdparse otherwise mis-detects them).
+            advance(); // @
+            if (currentIs(tok!"identifier"))
+                advance(); // marker name
+            else
+                break loop;
             break;
         default:
             break loop;
